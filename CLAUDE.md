@@ -1,10 +1,10 @@
-# mcp-stash — instructions for Claude
+# shadetree-ai-plugins — instructions for Claude
 
 This repo is both a **uv workspace** (for building/testing Python code)
 and a **Claude plugin marketplace** (`.claude-plugin/marketplace.json`
 at the repo root) that consulting clients install from directly in
 Claude Desktop: Customize → Plugins → (+) → Add marketplace →
-`ajelinek/mcp-stash`. Each installable unit is a "solution" — a
+`ajelinek/shadetree-ai-plugins`. Each installable unit is a "solution" — a
 self-contained Claude plugin bundling one or more local FastMCP
 servers, built so it still runs correctly after Claude Desktop copies
 it out of this repo into its own isolated plugin cache.
@@ -17,7 +17,7 @@ tested, working reference implementation).
 ## Repo layout
 
 ```
-mcp-stash/
+shadetree-ai-plugins/
   .claude-plugin/marketplace.json   # lists every installable plugin
   packages/common/                  # shared helpers, vendored (not installed) into plugins
   plugins/<name>/                   # one directory per solution
@@ -35,9 +35,9 @@ plugins/<name>/
   skills/<name>/SKILL.md        # tells Claude when/how to use this plugin's tools
   pyproject.toml
   uv.lock                      # standalone lock, NOT the workspace root's — see "Per-plugin lockfile" below
-  src/mcp_stash_<name>/
+  src/shadetree_ai_plugins_<name>/
     __init__.py                # `from .server import mcp`
-    __main__.py                # `from mcp_stash_<name>.server import mcp` + `mcp.run()` under `if __name__ == "__main__"`
+    __main__.py                # `from shadetree_ai_plugins_<name>.server import mcp` + `mcp.run()` under `if __name__ == "__main__"`
     server.py                  # FastMCP instance + @mcp.tool functions
   tests/test_server.py          # in-memory fastmcp.Client tests
   README.md
@@ -46,7 +46,7 @@ plugins/<name>/
 
 Naming: directory and marketplace `name` are kebab-case
 (`iphone-history`); the Python package is the same string with
-underscores (`mcp_stash_iphone_history`).
+underscores (`shadetree_ai_plugins_iphone_history`).
 
 ### `.claude-plugin/plugin.json`
 
@@ -64,7 +64,7 @@ ambiguously.
   "mcpServers": {
     "<name>": {
       "command": "uv",
-      "args": ["run", "--project", "${CLAUDE_PLUGIN_ROOT}", "--locked", "python", "-m", "mcp_stash_<name>"]
+      "args": ["run", "--project", "${CLAUDE_PLUGIN_ROOT}", "--locked", "python", "-m", "shadetree_ai_plugins_<name>"]
     }
   }
 }
@@ -81,7 +81,7 @@ resolving different dependency versions than what was tested.
 
 A single plugin can bundle **multiple** MCP servers: add more entries
 to this same `mcpServers` object (each its own `command`/`args`,
-typically one more `src/mcp_stash_<name>/<thing>_server.py` module and
+typically one more `src/shadetree_ai_plugins_<name>/<thing>_server.py` module and
 one more `__main__`-style entry point). Use this when a solution is one
 coherent product with several tool surfaces (e.g. Outlook + Teams +
 SharePoint under one client-facing install), rather than splitting into
@@ -93,7 +93,7 @@ several separately-installed plugins.
 {
   "source": {
     "type": "filesystem",
-    "path": "src/mcp_stash_<name>/server.py",
+    "path": "src/shadetree_ai_plugins_<name>/server.py",
     "entrypoint": "mcp"
   },
   "environment": { "type": "uv", "python": ">=3.12", "project": "." },
@@ -105,7 +105,7 @@ several separately-installed plugins.
 
 ```toml
 [project]
-name = "mcp-stash-<name>"
+name = "shadetree-ai-plugins-<name>"
 version = "0.1.0"
 description = "..."
 requires-python = ">=3.12"
@@ -118,7 +118,7 @@ build-backend = "uv_build"
 
 If this plugin vendors `packages/common` (see next section), add
 `"keyring>=25.5.0"` to `dependencies` (a transitive import of
-`mcp_stash_common`) and the `[tool.uv.build-backend]` table shown below.
+`shadetree_ai_plugins_common`) and the `[tool.uv.build-backend]` table shown below.
 
 ## Per-plugin lockfile (`uv.lock`)
 
@@ -142,7 +142,7 @@ has to be generated in that same isolated shape:
 
 ```bash
 rm -rf /tmp/lock-sim && mkdir -p /tmp/lock-sim
-cp -RL plugins/<name> /tmp/lock-sim/<name>   # -L dereferences the mcp_stash_common symlink, matching Desktop's cache-copy
+cp -RL plugins/<name> /tmp/lock-sim/<name>   # -L dereferences the shadetree_ai_plugins_common symlink, matching Desktop's cache-copy
 cd /tmp/lock-sim/<name>
 uv lock                                       # no enclosing workspace here -> produces a real standalone uv.lock
 cp uv.lock <repo>/plugins/<name>/uv.lock
@@ -171,18 +171,18 @@ Desktop at install time into a real copy, packaged into the plugin's
 own distribution via `uv_build`'s multi-directory `module-name`:
 
 ```bash
-ln -s ../../../packages/common/src/mcp_stash_common plugins/<name>/src/mcp_stash_common
+ln -s ../../../packages/common/src/shadetree_ai_plugins_common plugins/<name>/src/shadetree_ai_plugins_common
 ```
 
 ```toml
 [tool.uv.build-backend]
-module-name = ["mcp_stash_<name>", "mcp_stash_common"]
+module-name = ["shadetree_ai_plugins_<name>", "shadetree_ai_plugins_common"]
 ```
 
 `packages/common` itself is a **virtual** workspace member
 (`package = false`, no `[build-system]`) — it is never installed as its
 own distribution, only ever consumed this way. Only vendor it if the
-new plugin actually needs its helpers (logging, `~/.mcp-stash/<name>/`
+new plugin actually needs its helpers (logging, `~/.shadetree-ai-plugins/<name>/`
 state paths, keychain secrets, desktop notifications, read-only
 filesystem checks); it's fine for a plugin to skip this entirely.
 
@@ -231,7 +231,7 @@ that one entry; the other one covers it. This has only been verified
 by reasoning through the documented hook contract and by simulating
 the cache-copy locally (`packages/common/hooks/check_uv.py` is plain
 stdlib Python, dereferences and runs standalone the same way
-`mcp_stash_common` does) — it has **not** been exercised against a
+`shadetree_ai_plugins_common` does) — it has **not** been exercised against a
 real Windows machine or a live Claude Desktop session. Smoke-test it
 for real once there's Windows access, particularly whether a hook
 entry whose `command` can't be spawned at all surfaces as visible
@@ -279,7 +279,7 @@ For a stronger check that the vendored dependency truly survives
 Desktop's cache-copy (not just the in-memory `fastmcp.Client` tests),
 spawn the plugin's actual `.mcp.json` command against a copy with the
 symlink dereferenced (`cp -RL plugins/<name> /tmp/check`) and confirm
-`uv run --project /tmp/check python -m mcp_stash_<name>` still resolves
+`uv run --project /tmp/check python -m shadetree_ai_plugins_<name>` still resolves
 and runs with no sibling `packages/` directory present.
 
 ## Versioning and releases
@@ -293,7 +293,7 @@ entry to `plugins/<name>/CHANGELOG.md`, then
 `claude plugin tag plugins/<name> --push` (or omit `--push` and push
 manually), then push the commit. Clients only receive it when they
 explicitly update (Desktop's Plugins panel, or
-`/plugin update <name>@mcp-stash`) — never automatically. Use explicit
+`/plugin update <name>@shadetree-ai-plugins`) — never automatically. Use explicit
 semver here, not commit-SHA auto-versioning — these are client
 deliverables that need controlled releases.
 

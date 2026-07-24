@@ -10,13 +10,13 @@ import json
 import os
 from typing import Any
 
-from mcp_stash_common import state_dir
+from shadetree_ai_plugins_common import state_dir
 
 REACTIONS = ("liked", "disliked", "neutral", "unspecified")
 
 
 def preferences_path() -> str:
-    override = os.environ.get("MCP_STASH_CAREER_NAVIGATOR_PREFERENCES_PATH")
+    override = os.environ.get("SHADETREE_AI_PLUGINS_CAREER_NAVIGATOR_PREFERENCES_PATH")
     if override:
         return override
     return str(state_dir("career-navigator") / "student_preferences.json")

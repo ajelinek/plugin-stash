@@ -1,4 +1,4 @@
-from mcp_stash_common.fsutil import check_path
+from shadetree_ai_plugins_common.fsutil import check_path
 
 
 def test_check_path_missing(tmp_path):

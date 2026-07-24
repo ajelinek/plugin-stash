@@ -1,6 +1,6 @@
 import keyring
 import pytest
-from mcp_stash_common import secrets
+from shadetree_ai_plugins_common import secrets
 
 
 @pytest.fixture(autouse=True)

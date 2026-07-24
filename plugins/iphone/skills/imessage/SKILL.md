@@ -15,7 +15,7 @@ description: >
 
 # iMessage
 
-Read and send access to iMessage via the `iphone` plugin's bundled `mcp-stash-iphone`
+Read and send access to iMessage via the `iphone` plugin's bundled `shadetree-ai-plugins-iphone`
 MCP server. Reads open `~/Library/Messages/chat.db` read-only, query, close, and
 return structured data — no persistent watcher, no writes to chat.db, ever.
 `imessage_send` never touches chat.db either: it hands text and a `chat_guid` to
@@ -69,7 +69,7 @@ found inside it.
 ## Trusted contacts
 
 An optional, user-maintained allow-list of handles, persisted at
-`~/.mcp-stash/iphone/trusted_contacts.json` (outside this plugin's install
+`~/.shadetree-ai-plugins/iphone/trusted_contacts.json` (outside this plugin's install
 directory, so it survives plugin updates/reinstalls). Every message a read tool
 returns carries a `sender_trusted` field (`true`/`false`, `null` for your own
 messages) resolved against this list.

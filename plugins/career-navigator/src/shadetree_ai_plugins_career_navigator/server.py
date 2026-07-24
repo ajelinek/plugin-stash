@@ -1,4 +1,4 @@
-"""FastMCP server bundled with the mcp-stash 'career-navigator' plugin.
+"""FastMCP server bundled with the shadetree-ai-plugins 'career-navigator' plugin.
 
 A local, single-student career-exploration tool for high schoolers. Claude
 runs the actual conversation (a conversational RIASEC/Holland Code interview,
@@ -6,7 +6,7 @@ then academic/activity questions — see skills/career-navigator/SKILL.md); this
 server only validates and persists what Claude has already inferred, and
 ranks/searches the bundled local O*NET occupation dataset. No network calls,
 no external services, no accounts: everything lives in two local JSON files
-under ~/.mcp-stash/career-navigator/ plus the read-only bundled dataset.
+under ~/.shadetree-ai-plugins/career-navigator/ plus the read-only bundled dataset.
 
 - `career_status` — session-start preflight: profile/preferences state + what
   to ask about next.
@@ -30,7 +30,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastmcp import FastMCP
-from mcp_stash_common import get_logger
+from shadetree_ai_plugins_common import get_logger
 
 from .matching import rank_occupations, riasec_labels, validate_riasec_codes
 from .onet_data import RIASEC_CODES, find_by_soc_code, load_occupations
@@ -52,10 +52,10 @@ from .profile_store import (
     save_profile,
 )
 
-logger = get_logger("mcp-stash-career-navigator")
+logger = get_logger("shadetree-ai-plugins-career-navigator")
 
 mcp = FastMCP(
-    name="mcp-stash-career-navigator",
+    name="shadetree-ai-plugins-career-navigator",
     instructions=(
         "Conversational career exploration for a high school student, fully local: no "
         "accounts, no hosting, no network calls. Two local JSON files hold the student's "

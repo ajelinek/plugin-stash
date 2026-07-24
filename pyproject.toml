@@ -1,7 +1,7 @@
 [project]
-name = "mcp-stash"
+name = "shadetree-ai-plugins"
 version = "0.0.0"
-description = "uv workspace root + Claude Code/Desktop/Cowork plugin marketplace for mcp-stash solutions."
+description = "uv workspace root + Claude Code/Desktop/Cowork plugin marketplace for shadetree-ai-plugins solutions."
 requires-python = ">=3.12"
 
 [tool.uv]
@@ -26,7 +26,7 @@ testpaths = ["packages", "plugins"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-extend-exclude = ["plugins/*/src/mcp_stash_common"]
+extend-exclude = ["plugins/*/src/shadetree_ai_plugins_common"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]

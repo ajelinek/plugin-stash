@@ -4,7 +4,7 @@
 Plain stdlib only, deliberately. This runs before any plugin's own
 dependencies are installed (that's the whole point — it exists to catch
 the case where `uv run` in .mcp.json is about to fail), so it can't
-import fastmcp, mcp_stash_common, or anything else non-stdlib. It's
+import fastmcp, shadetree_ai_plugins_common, or anything else non-stdlib. It's
 invoked directly with a bare system Python interpreter (see hooks.json),
 not through `uv run`.
 """
@@ -28,7 +28,7 @@ def main() -> None:
         return  # present — exit 0 with no output, nothing to report
 
     message = (
-        "This mcp-stash plugin needs `uv` installed to run, and it wasn't found "
+        "This shadetree-ai-plugins plugin needs `uv` installed to run, and it wasn't found "
         f"on PATH. Install it with:\n\n  {install_command()}\n\n"
         "Then restart Claude Desktop (or start a new session) for this plugin's "
         "tools to work. See "

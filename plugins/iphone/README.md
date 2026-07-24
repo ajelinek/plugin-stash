@@ -21,10 +21,10 @@ The machine needs `uv` installed and on `PATH`
 ## Install
 
 In Claude Desktop: **Customize → Plugins → (+) → Add marketplace**,
-enter `ajelinek/mcp-stash`, then install `iphone` from the list.
+enter `ajelinek/shadetree-ai-plugins`, then install `iphone` from the list.
 (Equivalent commands also work in a Desktop or Cowork chat window:
-`/plugin marketplace add ajelinek/mcp-stash` then
-`/plugin install iphone@mcp-stash`.)
+`/plugin marketplace add ajelinek/shadetree-ai-plugins` then
+`/plugin install iphone@shadetree-ai-plugins`.)
 
 Ask Claude to "check iMessage doctor" or "check my call history" to exercise
 the tools once installed.
@@ -32,19 +32,19 @@ the tools once installed.
 ## What's inside
 
 - `.claude-plugin/plugin.json` / `.mcp.json` — plugin + MCP server manifest
-  (one server, `mcp_stash_iphone`).
+  (one server, `shadetree_ai_plugins_iphone`).
 - `fastmcp.json` — local dev only (`fastmcp run fastmcp.json`), not used by the
   installed plugin.
 - `skills/imessage/SKILL.md` — usage guidance for the `imessage_*` tools
   (read/send iMessage, trusted contacts).
 - `skills/icallhistory/SKILL.md` — usage guidance for the `calls_*` tools
   (read-only call history).
-- `src/mcp_stash_iphone/server.py` — the FastMCP server: `imessage_*` tools,
+- `src/shadetree_ai_plugins_iphone/server.py` — the FastMCP server: `imessage_*` tools,
   `calls_*` tools, and a shared `contacts` tool.
-- `src/mcp_stash_iphone/contacts.py` / `dates.py` — shared AddressBook
+- `src/shadetree_ai_plugins_iphone/contacts.py` / `dates.py` — shared AddressBook
   resolution and date-argument parsing used by both tool families.
-- `src/mcp_stash_common` — symlink to the repo's shared helpers (logging,
-  `~/.mcp-stash/iphone/` state dir for trusted contacts).
+- `src/shadetree_ai_plugins_common` — symlink to the repo's shared helpers (logging,
+  `~/.shadetree-ai-plugins/iphone/` state dir for trusted contacts).
 - `tests/test_server.py` — in-memory tests against synthetic chat.db /
   CallHistory.storedata / AddressBook fixtures (`uv run pytest` from repo
   root — no real macOS databases required).

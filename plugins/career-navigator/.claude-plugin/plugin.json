@@ -5,8 +5,8 @@
   "author": {
     "name": "ajelinek"
   },
-  "homepage": "https://github.com/ajelinek/mcp-stash",
-  "repository": "https://github.com/ajelinek/mcp-stash",
+  "homepage": "https://github.com/ajelinek/shadetree-ai-plugins",
+  "repository": "https://github.com/ajelinek/shadetree-ai-plugins",
   "license": "MIT",
-  "keywords": ["career-navigator", "riasec", "holland-code", "onet", "career-exploration", "fastmcp", "mcp-stash"]
+  "keywords": ["career-navigator", "riasec", "holland-code", "onet", "career-exploration", "fastmcp", "shadetree-ai-plugins"]
 }

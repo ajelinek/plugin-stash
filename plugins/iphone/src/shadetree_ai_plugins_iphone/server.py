@@ -1,4 +1,4 @@
-"""FastMCP server bundled with the mcp-stash 'iphone' plugin.
+"""FastMCP server bundled with the shadetree-ai-plugins 'iphone' plugin.
 
 One process, two tool families, sharing Contacts/date-parsing code:
 
@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Any
 
 from fastmcp import FastMCP
-from mcp_stash_common import get_logger, state_dir
+from shadetree_ai_plugins_common import get_logger, state_dir
 
 from .contacts import (
     address_book_dbs,
@@ -47,10 +47,10 @@ from .contacts import (
 )
 from .dates import APPLE_EPOCH_OFFSET, iso, parse_when, until_boundary
 
-logger = get_logger("mcp-stash-iphone")
+logger = get_logger("shadetree-ai-plugins-iphone")
 
 mcp = FastMCP(
-    name="mcp-stash-iphone",
+    name="shadetree-ai-plugins-iphone",
     instructions=(
         "Local, read-only (and for imessage_send, send-capable) access to this Mac's "
         "iMessage history, Mac/iPhone call history, and Contacts. All data stays local: "
@@ -69,26 +69,26 @@ mcp = FastMCP(
 # --------------------------------------------------------------------------------
 
 def chat_db_path() -> str:
-    return os.environ.get("MCP_STASH_IPHONE_CHAT_DB_PATH") or str(
+    return os.environ.get("SHADETREE_AI_PLUGINS_IPHONE_CHAT_DB_PATH") or str(
         Path.home() / "Library/Messages/chat.db"
     )
 
 
 def callhistory_db_path() -> str:
-    return os.environ.get("MCP_STASH_IPHONE_CALLHISTORY_DB_PATH") or str(
+    return os.environ.get("SHADETREE_AI_PLUGINS_IPHONE_CALLHISTORY_DB_PATH") or str(
         Path.home() / "Library/Application Support/CallHistoryDB/CallHistory.storedata"
     )
 
 
 def trusted_contacts_path() -> str:
-    override = os.environ.get("MCP_STASH_IPHONE_TRUSTED_CONTACTS_PATH")
+    override = os.environ.get("SHADETREE_AI_PLUGINS_IPHONE_TRUSTED_CONTACTS_PATH")
     if override:
         return override
     return str(state_dir("iphone") / "trusted_contacts.json")
 
 
 def attachments_root() -> Path:
-    override = os.environ.get("MCP_STASH_IPHONE_ATTACHMENTS_ROOT")
+    override = os.environ.get("SHADETREE_AI_PLUGINS_IPHONE_ATTACHMENTS_ROOT")
     if override:
         return Path(override).expanduser().resolve()
     return (Path.home() / "Library/Messages/Attachments").resolve()

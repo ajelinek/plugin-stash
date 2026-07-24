@@ -1,5 +1,5 @@
 {
-  "name": "mcp-stash",
+  "name": "shadetree-ai-plugins",
   "description": "Claude plugins for consulting client automations, each bundling a local FastMCP server (and Skills) as a one-command install.",
   "owner": {
     "name": "ajelinek",

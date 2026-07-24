@@ -10,7 +10,7 @@ import json
 import os
 from typing import Any
 
-from mcp_stash_common import state_dir
+from shadetree_ai_plugins_common import state_dir
 
 from .onet_data import RIASEC_CODES
 
@@ -18,7 +18,7 @@ CONFIDENCE_LEVELS = ("low", "medium", "high")
 
 
 def profile_path() -> str:
-    override = os.environ.get("MCP_STASH_CAREER_NAVIGATOR_PROFILE_PATH")
+    override = os.environ.get("SHADETREE_AI_PLUGINS_CAREER_NAVIGATOR_PROFILE_PATH")
     if override:
         return override
     return str(state_dir("career-navigator") / "student_profile.json")

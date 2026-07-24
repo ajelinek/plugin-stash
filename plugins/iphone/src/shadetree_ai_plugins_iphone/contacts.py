@@ -16,7 +16,7 @@ from pathlib import Path
 
 
 def address_book_sources_dir() -> str:
-    return os.environ.get("MCP_STASH_IPHONE_ADDRESSBOOK_DIR") or str(
+    return os.environ.get("SHADETREE_AI_PLUGINS_IPHONE_ADDRESSBOOK_DIR") or str(
         Path.home() / "Library/Application Support/AddressBook/Sources"
     )
 

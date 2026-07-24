@@ -2,7 +2,7 @@
 
 Deliberately metadata-only: these helpers report whether a path exists
 and basic stat info (size, modified time, readable), and never read file
-contents. This is the first thing every mcp-stash plugin that needs
+contents. This is the first thing every shadetree-ai-plugins plugin that needs
 local file access should prove works before building real data-reading
 logic on top.
 """

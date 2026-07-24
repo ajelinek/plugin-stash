@@ -1,7 +1,7 @@
 [project]
-name = "mcp-stash-iphone"
+name = "shadetree-ai-plugins-iphone"
 version = "0.1.0"
-description = "FastMCP servers (imessage, icallhistory) bundled with the mcp-stash 'iphone' plugin: local iMessage read/send and Mac/iPhone call history, both with Contacts resolution."
+description = "FastMCP servers (imessage, icallhistory) bundled with the shadetree-ai-plugins 'iphone' plugin: local iMessage read/send and Mac/iPhone call history, both with Contacts resolution."
 requires-python = ">=3.12"
 dependencies = [
     "fastmcp>=3.4",
@@ -13,4 +13,4 @@ requires = ["uv_build>=0.8.17,<0.9"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
-module-name = ["mcp_stash_iphone", "mcp_stash_common"]
+module-name = ["shadetree_ai_plugins_iphone", "shadetree_ai_plugins_common"]

@@ -24,7 +24,7 @@ student. The actual interview and career conversation happen in-chat — this
 skill's `career_*` MCP tools only validate and persist what you've already
 inferred, and search/rank the bundled local O*NET 30.3-derived dataset (923
 occupations). No accounts, no hosting: the student's state lives in two
-local JSON files under `~/.mcp-stash/career-navigator/`, and the `career_*`
+local JSON files under `~/.shadetree-ai-plugins/career-navigator/`, and the `career_*`
 tools/bundled dataset never call the network. That's about this plugin's
 own tools, not the whole conversation — use your regular web search tool
 (e.g. WebSearch) when a question needs current, real-world information the
@@ -41,7 +41,7 @@ static snapshot can't have; see "Filling gaps with web search" below.
   not a replacement for them.
 - **Single student, single machine.** No accounts, no multi-student
   switching, no sync across devices this phase — deleting
-  `~/.mcp-stash/career-navigator/` loses all history.
+  `~/.shadetree-ai-plugins/career-navigator/` loses all history.
 - **No live O*NET data.** The bundled dataset is a fixed snapshot (see
   [references/onet-data.md](references/onet-data.md)) — it won't reflect
   O*NET updates released after this plugin was built, and only covers the
@@ -275,7 +275,7 @@ commitment"), not as a default filter.
   is a simple two-code overlap heuristic, not a learned preference model — it
   will occasionally deprioritize something the student would actually like.
 - Single student, single machine, no encryption at rest — the two state
-  files are plain JSON under `~/.mcp-stash/career-navigator/`.
+  files are plain JSON under `~/.shadetree-ai-plugins/career-navigator/`.
 
 See [references/riasec-interview.md](references/riasec-interview.md) for the
 full question bank (with RIASEC tags) and more tone examples, and
