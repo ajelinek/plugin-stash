@@ -5,9 +5,13 @@ student. Claude runs the actual conversation — a natural, ~8-15 question
 RIASEC (Holland Code) interview, then academics/activities — and this
 plugin's bundled FastMCP server validates and persists what's inferred, then
 searches/ranks a local O*NET 30.3-derived occupation dataset (923
-occupations). Everything stays on this machine: two local JSON files under
-`~/.mcp-stash/career-navigator/`, plus the bundled read-only dataset. No
-accounts, no hosting, no network calls at runtime.
+occupations). Everything the plugin itself stores and runs stays on this
+machine: two local JSON files under `~/.mcp-stash/career-navigator/`, plus
+the bundled read-only dataset. No accounts, no hosting, no network calls
+from the plugin's own tools/data. Claude may still use its own web search
+mid-conversation for time-sensitive facts (current wages, program/licensing
+specifics) the static dataset can't have — see the skill's "Filling gaps
+with web search" section.
 
 This plugin is primarily its skill (`skills/career-navigator/SKILL.md`) —
 the conversational RIASEC-interview technique and career-presentation flow

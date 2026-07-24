@@ -11,8 +11,10 @@ description: >
   or "what should I do after high school". Not a substitute for a licensed
   guidance/career counselor and not a validated psychometric instrument —
   RIASEC scores here are Claude's own conversational inference. Single
-  local student profile only; everything stays on this machine, no network
-  calls at runtime.
+  local student profile only; this plugin's own tools/data are fully local
+  (no network calls), but use ordinary web search for time-sensitive facts
+  (current wages, program/licensing specifics) the static O*NET snapshot
+  can't have.
 ---
 
 # Career Navigator
@@ -21,9 +23,12 @@ A local, conversational career-exploration companion for one high school
 student. The actual interview and career conversation happen in-chat — this
 skill's `career_*` MCP tools only validate and persist what you've already
 inferred, and search/rank the bundled local O*NET 30.3-derived dataset (923
-occupations). No accounts, no hosting, no network calls at runtime: the
-student's state lives in two local JSON files under
-`~/.mcp-stash/career-navigator/`.
+occupations). No accounts, no hosting: the student's state lives in two
+local JSON files under `~/.mcp-stash/career-navigator/`, and the `career_*`
+tools/bundled dataset never call the network. That's about this plugin's
+own tools, not the whole conversation — use your regular web search tool
+(e.g. WebSearch) when a question needs current, real-world information the
+static snapshot can't have; see "Filling gaps with web search" below.
 
 ## Non-goals (read before using)
 
@@ -40,7 +45,9 @@ student's state lives in two local JSON files under
 - **No live O*NET data.** The bundled dataset is a fixed snapshot (see
   [references/onet-data.md](references/onet-data.md)) — it won't reflect
   O*NET updates released after this plugin was built, and only covers the
-  923 (of ~1,000+) occupations that have RIASEC data in that snapshot.
+  923 (of ~1,000+) occupations that have RIASEC data in that snapshot. It
+  also has no wages, employment outlook, or program/licensing specifics —
+  use web search for those (see "Filling gaps with web search" below).
 
 ## Session start: call `career_status`
 
@@ -193,6 +200,40 @@ Present what you conclude actually fits, not just whatever sorted first.
 This is the main way this tool compensates for not being a vector/embedding
 search: the wider net plus your own reading, not a fancier ranking formula.
 
+## Filling gaps with web search
+
+The bundled O*NET dataset is a static, offline snapshot (see
+[references/onet-data.md](references/onet-data.md)) — it has no wages,
+employment outlook, specific colleges/programs, or licensing/certification
+requirements, and it won't reflect anything that's changed since the 30.3
+release. `career_search`/`career_rank_matches` are the right tools for "does
+this occupation fit the student" — they can't answer questions that need
+current, real-world information. For those, use your regular web search
+tool (e.g. WebSearch) directly; it isn't one of this plugin's `career_*`
+tools, and using it doesn't change anything about the plugin's own data
+staying local (see the note at the top of this skill).
+
+Reach for it when the conversation needs:
+
+- Current wages/salary or cost-of-living context for a specific role or area
+- Job outlook — whether a field is growing, shrinking, or being automated
+- Specific colleges, degree programs, certifications, or licensing
+  requirements (these vary by state and change over time — `typical_education`
+  is a coarse O*NET category, not a real path)
+- Anything else time-sensitive the student asks about directly (a company,
+  a local employer, a recent industry change)
+
+Don't reach for it as a substitute for the local matching above — it's a
+supplement for facts the static dataset can't have, not a replacement for
+`career_search`/`career_rank_matches`'s fit-finding, and not a way to
+route around "Free-text search: widen, then judge for yourself" when the
+real issue is a phrasing mismatch against local data rather than a genuine
+information gap. When you do search, tell the student plainly that it's
+current web information (not part of the vetted O*NET data) and keep the
+same "not a substitute for a school counselor" caution that applies to the
+rest of this skill — doubly so for anything financial (wages, tuition,
+financial aid) or otherwise consequential.
+
 ## Everyday tools
 
 | Tool | Purpose |
@@ -225,8 +266,9 @@ commitment"), not as a default filter.
   RIASEC ("Career Interest Types") data in the 30.3 snapshot this plugin was
   built from — a handful of real O*NET occupations aren't searchable here.
   It's also a deliberate summary, not the full O*NET database — Abilities,
-  Work Activities, Work Context, Work Values, and most wage/employment data
-  aren't included (see references/onet-data.md).
+  Work Activities, Work Context, Work Values, and wage/employment data
+  aren't included (see references/onet-data.md); use web search for those
+  (see "Filling gaps with web search" above).
 - `favorite_subjects`/activities feed matching as a keyword nudge, not a
   filter; GPA/ACT/SAT never do (see "Academics & activities" above for why).
 - Deprioritization of disliked career "categories" (Stage 3 personalization)
