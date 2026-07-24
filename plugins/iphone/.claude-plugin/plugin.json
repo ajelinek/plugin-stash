@@ -5,8 +5,8 @@
   "author": {
     "name": "ajelinek"
   },
-  "homepage": "https://github.com/ajelinek/mcp-stash",
-  "repository": "https://github.com/ajelinek/mcp-stash",
+  "homepage": "https://github.com/ajelinek/shadetree-ai-plugins",
+  "repository": "https://github.com/ajelinek/shadetree-ai-plugins",
   "license": "MIT",
-  "keywords": ["imessage", "icallhistory", "contacts", "iphone", "macos", "fastmcp", "mcp-stash"]
+  "keywords": ["imessage", "icallhistory", "contacts", "iphone", "macos", "fastmcp", "shadetree-ai-plugins"]
 }

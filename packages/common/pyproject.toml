@@ -1,7 +1,7 @@
 [project]
-name = "mcp-stash-common"
+name = "shadetree-ai-plugins-common"
 version = "0.1.0"
-description = "Shared helpers (stdio-safe logging, state paths, keychain secrets, desktop notifications, safe read-only filesystem checks), vendored into mcp-stash plugins via symlink — never installed as its own distribution."
+description = "Shared helpers (stdio-safe logging, state paths, keychain secrets, desktop notifications, safe read-only filesystem checks), vendored into shadetree-ai-plugins plugins via symlink — never installed as its own distribution."
 requires-python = ">=3.12"
 dependencies = [
     "keyring>=25.5.0",

@@ -1,7 +1,7 @@
 [project]
-name = "mcp-stash-career-navigator"
+name = "shadetree-ai-plugins-career-navigator"
 version = "0.1.0"
-description = "FastMCP server bundled with the mcp-stash 'career-navigator' plugin: conversational RIASEC profiling and local O*NET occupation matching for a high school student."
+description = "FastMCP server bundled with the shadetree-ai-plugins 'career-navigator' plugin: conversational RIASEC profiling and local O*NET occupation matching for a high school student."
 requires-python = ">=3.12"
 dependencies = [
     "fastmcp>=3.4",
@@ -13,4 +13,4 @@ requires = ["uv_build>=0.8.17,<0.9"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
-module-name = ["mcp_stash_career_navigator", "mcp_stash_common"]
+module-name = ["shadetree_ai_plugins_career_navigator", "shadetree_ai_plugins_common"]

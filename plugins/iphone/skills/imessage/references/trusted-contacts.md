@@ -6,8 +6,8 @@ committed to this repo.
 
 ## Storage
 
-Persisted at `~/.mcp-stash/iphone/trusted_contacts.json` (via
-`mcp_stash_common.state_dir("iphone")`), deliberately **outside** this plugin's own
+Persisted at `~/.shadetree-ai-plugins/iphone/trusted_contacts.json` (via
+`shadetree_ai_plugins_common.state_dir("iphone")`), deliberately **outside** this plugin's own
 install directory: Claude Desktop's plugin cache can be replaced wholesale on an
 update, and a file living inside it would be lost along with it. The state
 directory survives plugin reinstalls/updates. `imessage_trusted_list`,
@@ -15,7 +15,7 @@ directory survives plugin reinstalls/updates. `imessage_trusted_list`,
 nothing needs to exist beforehand; it's created automatically the first time
 `imessage_trusted_add` runs.
 
-Override the path with the `MCP_STASH_IPHONE_TRUSTED_CONTACTS_PATH` environment
+Override the path with the `SHADETREE_AI_PLUGINS_IPHONE_TRUSTED_CONTACTS_PATH` environment
 variable (mainly useful for tests — see `tests/test_server.py`).
 
 ## Schema

@@ -7,7 +7,7 @@ from __future__ import annotations
 import keyring
 import keyring.errors
 
-_SERVICE_PREFIX = "mcp-stash"
+_SERVICE_PREFIX = "shadetree-ai-plugins"
 
 
 def _service(namespace: str) -> str:

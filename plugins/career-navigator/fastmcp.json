@@ -1,7 +1,7 @@
 {
   "source": {
     "type": "filesystem",
-    "path": "src/mcp_stash_career_navigator/server.py",
+    "path": "src/shadetree_ai_plugins_career_navigator/server.py",
     "entrypoint": "mcp"
   },
   "environment": {

@@ -30,7 +30,7 @@ BASE_URL = "https://www.onetcenter.org/dl_files/database/db_30_3_csv"
 DATA_PATH = (
     Path(__file__).resolve().parent.parent
     / "src"
-    / "mcp_stash_career_navigator"
+    / "shadetree_ai_plugins_career_navigator"
     / "data"
     / "onet_occupations.json"
 )

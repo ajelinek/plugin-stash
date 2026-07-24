@@ -1,4 +1,4 @@
-"""Stdio-safe logging for every mcp-stash server.
+"""Stdio-safe logging for every shadetree-ai-plugins server.
 
 MCP stdio transport uses stdout exclusively for the JSON-RPC stream.
 This logger only ever writes to stderr and/or a file under the

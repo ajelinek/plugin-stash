@@ -2,7 +2,7 @@
 
 ## Source and license
 
-`src/mcp_stash_career_navigator/data/onet_occupations.json` is a trimmed,
+`src/shadetree_ai_plugins_career_navigator/data/onet_occupations.json` is a trimmed,
 pre-processed extract of the **O*NET 30.3 Database**
 (https://www.onetcenter.org/database.html), sponsored by the U.S. Department
 of Labor's Employment and Training Administration (USDOL/ETA). O*NET 30.3 is
@@ -70,7 +70,7 @@ The rest of the dataset (everything except `tasks`/`top_work_styles`) was a
 one-time manual build with no committed script. To regenerate it against a
 newer O*NET release, re-fetch the tables above for the new version number
 and re-run the same join/trim logic, then replace
-`src/mcp_stash_career_navigator/data/onet_occupations.json`, re-run
+`src/shadetree_ai_plugins_career_navigator/data/onet_occupations.json`, re-run
 `scripts/enrich_onet_dataset.py`, and bump the plugin's version per the root
 `CLAUDE.md`'s release steps.
 

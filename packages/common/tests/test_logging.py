@@ -1,4 +1,4 @@
-from mcp_stash_common.logging import get_logger
+from shadetree_ai_plugins_common.logging import get_logger
 
 
 def test_logger_writes_to_stderr_not_stdout(capsys):

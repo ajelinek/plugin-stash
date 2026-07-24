@@ -10,10 +10,10 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "mcp-stash",
-    "mcp-stash-career-navigator",
-    "mcp-stash-common",
-    "mcp-stash-iphone",
+    "shadetree-ai-plugins",
+    "shadetree-ai-plugins-career-navigator",
+    "shadetree-ai-plugins-common",
+    "shadetree-ai-plugins-iphone",
 ]
 
 [[package]]
@@ -630,70 +630,6 @@ wheels = [
 ]
 
 [[package]]
-name = "mcp-stash"
-version = "0.0.0"
-source = { virtual = "." }
-
-[package.dev-dependencies]
-dev = [
-    { name = "fastmcp" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "fastmcp", specifier = ">=3.4" },
-    { name = "pytest", specifier = ">=8.3" },
-    { name = "pytest-asyncio", specifier = ">=0.24" },
-    { name = "ruff", specifier = ">=0.8" },
-]
-
-[[package]]
-name = "mcp-stash-career-navigator"
-version = "0.1.0"
-source = { editable = "plugins/career-navigator" }
-dependencies = [
-    { name = "fastmcp" },
-    { name = "keyring" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "fastmcp", specifier = ">=3.4" },
-    { name = "keyring", specifier = ">=25.5.0" },
-]
-
-[[package]]
-name = "mcp-stash-common"
-version = "0.1.0"
-source = { virtual = "packages/common" }
-dependencies = [
-    { name = "keyring" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "keyring", specifier = ">=25.5.0" }]
-
-[[package]]
-name = "mcp-stash-iphone"
-version = "0.1.0"
-source = { editable = "plugins/iphone" }
-dependencies = [
-    { name = "fastmcp" },
-    { name = "keyring" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "fastmcp", specifier = ">=3.4" },
-    { name = "keyring", specifier = ">=25.5.0" },
-]
-
-[[package]]
 name = "mdurl"
 version = "0.1.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1239,6 +1175,70 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz", hash = "sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be", size = 19884, upload-time = "2025-11-23T19:02:53.191Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b7/46/f5af3402b579fd5e11573ce652019a67074317e18c1935cc0b4ba9b35552/secretstorage-3.5.0-py3-none-any.whl", hash = "sha256:0ce65888c0725fcb2c5bc0fdb8e5438eece02c523557ea40ce0703c266248137", size = 15554, upload-time = "2025-11-23T19:02:51.545Z" },
+]
+
+[[package]]
+name = "shadetree-ai-plugins"
+version = "0.0.0"
+source = { virtual = "." }
+
+[package.dev-dependencies]
+dev = [
+    { name = "fastmcp" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "fastmcp", specifier = ">=3.4" },
+    { name = "pytest", specifier = ">=8.3" },
+    { name = "pytest-asyncio", specifier = ">=0.24" },
+    { name = "ruff", specifier = ">=0.8" },
+]
+
+[[package]]
+name = "shadetree-ai-plugins-career-navigator"
+version = "0.1.0"
+source = { editable = "plugins/career-navigator" }
+dependencies = [
+    { name = "fastmcp" },
+    { name = "keyring" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastmcp", specifier = ">=3.4" },
+    { name = "keyring", specifier = ">=25.5.0" },
+]
+
+[[package]]
+name = "shadetree-ai-plugins-common"
+version = "0.1.0"
+source = { virtual = "packages/common" }
+dependencies = [
+    { name = "keyring" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "keyring", specifier = ">=25.5.0" }]
+
+[[package]]
+name = "shadetree-ai-plugins-iphone"
+version = "0.1.0"
+source = { editable = "plugins/iphone" }
+dependencies = [
+    { name = "fastmcp" },
+    { name = "keyring" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastmcp", specifier = ">=3.4" },
+    { name = "keyring", specifier = ">=25.5.0" },
 ]
 
 [[package]]

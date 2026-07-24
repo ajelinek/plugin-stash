@@ -1,4 +1,4 @@
-"""Tests for the mcp-stash-iphone FastMCP server against synthetic chat.db /
+"""Tests for the shadetree-ai-plugins-iphone FastMCP server against synthetic chat.db /
 CallHistory.storedata / AddressBook fixtures — no real macOS databases required.
 
 Fixture data and the attributedBody hex blobs are ported from the reference
@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 from fastmcp import Client
-from mcp_stash_iphone import server as srv
+from shadetree_ai_plugins_iphone import server as srv
 
 APPLE_EPOCH_OFFSET = srv.APPLE_EPOCH_OFFSET
 
@@ -89,7 +89,7 @@ class TestReactionTypeNames:
 
 class TestDateBoundary:
     def test_bare_iso_date_and_named_days_are_bare_days(self):
-        from mcp_stash_iphone.dates import _is_bare_day
+        from shadetree_ai_plugins_iphone.dates import _is_bare_day
 
         assert srv.iso  # sanity: module imported iso
         assert _is_bare_day("2026-06-30")
@@ -139,11 +139,13 @@ def fixtures(tmp_path, monkeypatch):
     _build_address_book(addressbook_dir / "SOURCE1" / "AddressBook-v22.abcddb")
     _build_call_history(callhistory_db_path)
 
-    monkeypatch.setenv("MCP_STASH_IPHONE_CHAT_DB_PATH", str(chat_db_path))
-    monkeypatch.setenv("MCP_STASH_IPHONE_CALLHISTORY_DB_PATH", str(callhistory_db_path))
-    monkeypatch.setenv("MCP_STASH_IPHONE_ADDRESSBOOK_DIR", str(addressbook_dir))
-    monkeypatch.setenv("MCP_STASH_IPHONE_TRUSTED_CONTACTS_PATH", str(trusted_contacts_path))
-    monkeypatch.setenv("MCP_STASH_IPHONE_ATTACHMENTS_ROOT", str(attachments_root))
+    monkeypatch.setenv("SHADETREE_AI_PLUGINS_IPHONE_CHAT_DB_PATH", str(chat_db_path))
+    monkeypatch.setenv("SHADETREE_AI_PLUGINS_IPHONE_CALLHISTORY_DB_PATH", str(callhistory_db_path))
+    monkeypatch.setenv("SHADETREE_AI_PLUGINS_IPHONE_ADDRESSBOOK_DIR", str(addressbook_dir))
+    monkeypatch.setenv(
+        "SHADETREE_AI_PLUGINS_IPHONE_TRUSTED_CONTACTS_PATH", str(trusted_contacts_path)
+    )
+    monkeypatch.setenv("SHADETREE_AI_PLUGINS_IPHONE_ATTACHMENTS_ROOT", str(attachments_root))
     srv._handle_cache.clear()
 
     return {
@@ -628,7 +630,9 @@ async def test_calls_contacts_shared_with_imessage(fixtures):
 # --------------------------------------------------------------------------------
 
 def test_server_has_no_network_calls():
-    server_path = Path(__file__).resolve().parent.parent / "src" / "mcp_stash_iphone" / "server.py"
+    server_path = (
+        Path(__file__).resolve().parent.parent / "src" / "shadetree_ai_plugins_iphone" / "server.py"
+    )
     source = server_path.read_text()
     banned_imports = re.compile(
         r"^\s*(import|from)\s+(requests|socket|urllib\d*|http\.client|httplib)\b", re.MULTILINE

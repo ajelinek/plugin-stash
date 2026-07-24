@@ -1,4 +1,4 @@
-"""Tests for the mcp-stash-career-navigator FastMCP server, against a small
+"""Tests for the shadetree-ai-plugins-career-navigator FastMCP server, against a small
 synthetic O*NET-shaped dataset — no dependency on the real bundled dataset's
 exact contents, so these stay stable across future dataset rebuilds.
 """
@@ -11,14 +11,14 @@ from pathlib import Path
 
 import pytest
 from fastmcp import Client
-from mcp_stash_career_navigator import server as srv
-from mcp_stash_career_navigator.matching import (
+from shadetree_ai_plugins_career_navigator import server as srv
+from shadetree_ai_plugins_career_navigator.matching import (
     keyword_score,
     riasec_overlap_score,
     score_occupation,
     validate_riasec_codes,
 )
-from mcp_stash_career_navigator.profile_store import (
+from shadetree_ai_plugins_career_navigator.profile_store import (
     compute_completeness,
     compute_top_codes,
     default_profile,
@@ -50,7 +50,7 @@ class TestComputeTopCodes:
 
 class TestComputeCompleteness:
     def _profile(self, **overrides):
-        from mcp_stash_career_navigator.profile_store import default_profile
+        from shadetree_ai_plugins_career_navigator.profile_store import default_profile
 
         profile = default_profile()
         for section, values in overrides.items():
@@ -268,12 +268,13 @@ def fixtures(tmp_path, monkeypatch):
     dataset_path = tmp_path / "onet_occupations.json"
     dataset_path.write_text(json.dumps(SYNTHETIC_OCCUPATIONS))
 
-    monkeypatch.setenv("MCP_STASH_CAREER_NAVIGATOR_ONET_PATH", str(dataset_path))
+    monkeypatch.setenv("SHADETREE_AI_PLUGINS_CAREER_NAVIGATOR_ONET_PATH", str(dataset_path))
     monkeypatch.setenv(
-        "MCP_STASH_CAREER_NAVIGATOR_PROFILE_PATH", str(tmp_path / "student_profile.json")
+        "SHADETREE_AI_PLUGINS_CAREER_NAVIGATOR_PROFILE_PATH", str(tmp_path / "student_profile.json")
     )
     monkeypatch.setenv(
-        "MCP_STASH_CAREER_NAVIGATOR_PREFERENCES_PATH", str(tmp_path / "student_preferences.json")
+        "SHADETREE_AI_PLUGINS_CAREER_NAVIGATOR_PREFERENCES_PATH",
+        str(tmp_path / "student_preferences.json"),
     )
     return {"tmp_path": tmp_path}
 
@@ -579,7 +580,9 @@ async def test_rank_matches_deprioritizes_similar_category_after_dislike(fixture
 
 
 def test_server_has_no_network_calls():
-    src_dir = Path(__file__).resolve().parent.parent / "src" / "mcp_stash_career_navigator"
+    src_dir = (
+        Path(__file__).resolve().parent.parent / "src" / "shadetree_ai_plugins_career_navigator"
+    )
     banned_imports = re.compile(
         r"^\s*(import|from)\s+(requests|socket|urllib\d*|http\.client|httplib)\b", re.MULTILINE
     )

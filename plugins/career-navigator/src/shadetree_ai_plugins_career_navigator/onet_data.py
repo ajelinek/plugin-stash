@@ -39,7 +39,7 @@ _cache: dict[Path, list[dict[str, Any]]] = {}
 
 
 def onet_data_path() -> Path:
-    override = os.environ.get("MCP_STASH_CAREER_NAVIGATOR_ONET_PATH")
+    override = os.environ.get("SHADETREE_AI_PLUGINS_CAREER_NAVIGATOR_ONET_PATH")
     if override:
         return Path(override)
     return Path(__file__).parent / "data" / "onet_occupations.json"

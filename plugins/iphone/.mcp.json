@@ -9,7 +9,7 @@
         "--locked",
         "python",
         "-m",
-        "mcp_stash_iphone"
+        "shadetree_ai_plugins_iphone"
       ]
     }
   }

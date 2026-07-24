@@ -17,7 +17,7 @@ description: >
 # icallhistory
 
 Read-only access to the Mac's local call history via the `iphone` plugin's bundled
-`mcp-stash-iphone` MCP server. Tools open
+`shadetree-ai-plugins-iphone` MCP server. Tools open
 `~/Library/Application Support/CallHistoryDB/CallHistory.storedata` read-only,
 query, close, and return structured data — no persistent process, no writes,
 ever. This is a **separate database from iMessage** (`chat.db`); see

@@ -1,4 +1,4 @@
-# mcp-stash
+# shadetree-ai-plugins
 
 A growing collection of Claude plugins ("solutions") for consulting
 clients, each bundling its own local MCP server(s) (and, over time,
@@ -31,7 +31,7 @@ solutions they need.
 ## Repo layout
 
 ```
-mcp-stash/
+shadetree-ai-plugins/
   CLAUDE.md                        # how this repo works — read this to add a new plugin
   .claude-plugin/marketplace.json  # the marketplace manifest
   packages/common/                 # shared helpers, vendored (not installed) into plugins
@@ -42,7 +42,7 @@ mcp-stash/
 ## Installing a plugin (for clients)
 
 In Claude Desktop: **Customize → Plugins → (+) → Add marketplace**,
-enter `ajelinek/mcp-stash`, then install a plugin from the list (for
+enter `ajelinek/shadetree-ai-plugins`, then install a plugin from the list (for
 now: `imessages` or `iphone-history`).
 
 The equivalent commands also work the same way in a Desktop or Cowork
@@ -50,16 +50,16 @@ chat window, since both reach the same locally-running MCP server once
 it's registered through Desktop:
 
 ```
-/plugin marketplace add ajelinek/mcp-stash
-/plugin install imessages@mcp-stash
+/plugin marketplace add ajelinek/shadetree-ai-plugins
+/plugin install imessages@shadetree-ai-plugins
 ```
 
 To update or remove a plugin later:
 
 ```
-/plugin update imessages@mcp-stash
-/plugin marketplace update mcp-stash
-/plugin uninstall imessages@mcp-stash
+/plugin update imessages@shadetree-ai-plugins
+/plugin marketplace update shadetree-ai-plugins
+/plugin uninstall imessages@shadetree-ai-plugins
 ```
 
 **Prerequisite:** the machine running Claude Desktop needs
@@ -99,7 +99,7 @@ Each plugin is versioned independently — bump `version` in
 `plugins/<name>/CHANGELOG.md`, then `claude plugin tag plugins/<name>`
 (`--dry-run` to preview, `--push` to push) and push the commit. Clients
 only receive the update when they explicitly update (via the Desktop
-Plugins panel, or `/plugin update <name>@mcp-stash`) — nothing changes
+Plugins panel, or `/plugin update <name>@shadetree-ai-plugins`) — nothing changes
 on a client's machine on its own. Explicit semver (rather than letting
 every commit auto-count as a new version) is deliberate here: these are
 client deliverables that need controlled releases, not an
