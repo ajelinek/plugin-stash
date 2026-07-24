@@ -24,9 +24,13 @@ mechanism for a first-run network download (see the root `CLAUDE.md`'s
 `uv`-missing hook section: this repo deliberately never auto-fetches
 anything unattended onto a client's machine), and a fully offline plugin is
 simpler to reason about and test. So the dataset is committed as a single
-~700KB JSON file, pre-joined and pre-trimmed to only what the matching logic
-in `matching.py` actually uses. It won't reflect O*NET releases after 30.3 —
-regenerate it (see below) to pick up a newer release.
+~1.3MB JSON file, pre-joined and pre-trimmed to only what the matching logic
+in `matching.py` actually uses — a deliberate summary of O*NET, not the full
+database (O*NET also has Abilities, Work Activities, Work Context, Work
+Values, the full ~35-element Skills/Knowledge scores beyond each
+occupation's top 5, Tools & Technology, Related Occupations, and wage/
+employment outlook — none of that is in this file). It won't reflect O*NET
+releases after 30.3 — regenerate it (see below) to pick up a newer release.
 
 ## Build process
 
@@ -42,6 +46,8 @@ Joined the following O*NET 30.3 CSV tables
 | `education.csv` + `education_categories.csv` | `typical_education` — the modal (highest Data Value) "Required Level of Education" category, resolved to its label |
 | `essential_skills.csv` | `top_skills` — top 5 skill elements by Importance (`IM`) score |
 | `knowledge.csv` | `top_knowledge` — top 5 knowledge elements by Importance (`IM`) score |
+| `task_ratings.csv` | `tasks` — top 5 task statements by Importance (`IM`) score |
+| `work_styles.csv` | `top_work_styles` — top 5 Work Styles elements by Work Styles Impact (`WI`) score. Work Styles is O*NET's closest concept to "grit"/persistence — the element list includes Persistence, Achievement/Effort, Dependability, Initiative, Adaptability, Stress Tolerance |
 
 Only the **923** occupations (of 1,016 total in `occupation_data.csv`) that
 have all six RIASEC elements present in `career_interest_types.csv` were
@@ -49,12 +55,24 @@ kept — the rest have no RIASEC data in this O*NET release and can't be
 matched on that axis. RIASEC scores are rounded to 2 decimals; `top_codes` is
 the 3 highest-scoring letters, descending.
 
-This was a one-time build, not something this repo automates — there's no
-script in this plugin that re-runs it. To regenerate against a newer O*NET
-release, re-fetch the tables above for the new version number and re-run the
-same join/trim logic, then replace
-`src/mcp_stash_career_navigator/data/onet_occupations.json` and bump the
-plugin's version per the root `CLAUDE.md`'s release steps.
+`tasks` and `top_work_styles` were added in a second pass, after the initial
+build, by `scripts/enrich_onet_dataset.py` — a real, reusable script (unlike
+the rest of this dataset's original one-time-manual build) that fetches
+`task_ratings.csv`/`work_styles.csv` from the same O*NET 30.3 release and
+joins them onto the existing 923 records by O*NET-SOC Code, without adding,
+removing, or otherwise touching any other field. An occupation with no rated
+tasks or work styles in this release (29 and 32 of the 923, respectively)
+gets an empty list for that field rather than being dropped. Re-run it any
+time (`python3 scripts/enrich_onet_dataset.py` from the plugin root) — it's
+idempotent against the current file.
+
+The rest of the dataset (everything except `tasks`/`top_work_styles`) was a
+one-time manual build with no committed script. To regenerate it against a
+newer O*NET release, re-fetch the tables above for the new version number
+and re-run the same join/trim logic, then replace
+`src/mcp_stash_career_navigator/data/onet_occupations.json`, re-run
+`scripts/enrich_onet_dataset.py`, and bump the plugin's version per the root
+`CLAUDE.md`'s release steps.
 
 ## Field schema (`onet_occupations.json`)
 
@@ -71,9 +89,16 @@ Each entry:
   "job_zone_label": "Job Zone Four: Considerable Preparation Needed",
   "typical_education": "Bachelor's Degree",
   "top_skills": ["Reading Comprehension", "Active Listening", "..."],
-  "top_knowledge": ["Computers and Electronics", "Mathematics", "..."]
+  "top_knowledge": ["Computers and Electronics", "Mathematics", "..."],
+  "tasks": ["Modify existing software to correct errors...", "..."],
+  "top_work_styles": ["Analytical Thinking", "Integrity", "..."]
 }
 ```
+
+`tasks` and `top_work_styles` can be an empty list for the small number of
+occupations (29 and 32 of 923, respectively) that had no rated data for that
+element in this O*NET release — always check for an empty list rather than
+assuming every occupation has 5 of each.
 
 `riasec` values are on O*NET's own 1-7 scale — **not** the same 0-100 scale
 `career_update_profile` uses for the *student's* self-reported-by-Claude
