@@ -15,9 +15,15 @@ from mcp_stash_career_navigator import server as srv
 from mcp_stash_career_navigator.matching import (
     keyword_score,
     riasec_overlap_score,
+    score_occupation,
     validate_riasec_codes,
 )
-from mcp_stash_career_navigator.profile_store import compute_completeness, compute_top_codes
+from mcp_stash_career_navigator.profile_store import (
+    compute_completeness,
+    compute_top_codes,
+    default_profile,
+    interest_terms,
+)
 
 # --------------------------------------------------------------------------------
 # Pure-function tests (no fixtures needed)
@@ -116,6 +122,68 @@ class TestKeywordScore:
 
     def test_empty_query_scores_zero(self):
         assert keyword_score("", self._occ()) == 0.0
+
+    def test_missing_tasks_and_work_styles_keys_dont_raise(self):
+        # Real records post-enrichment always have these keys, but older/
+        # synthetic occupations (like this fixture and the test dataset
+        # below) don't -- keyword_score must tolerate that.
+        assert keyword_score("electrician", self._occ()) >= 0.0
+
+    def test_tasks_and_work_styles_are_part_of_the_searchable_corpus(self):
+        occ = self._occ()
+        occ["tasks"] = ["Splice wires together using knives, pliers, and tape."]
+        occ["top_work_styles"] = ["Attention to Detail"]
+        assert keyword_score("splice wires", occ) > 0
+        assert keyword_score("attention to detail", occ) > 0
+
+
+class TestScoreOccupationInterestTerms:
+    def _occ(self):
+        return {
+            "title": "Actuaries",
+            "description": "Analyze statistical data to estimate probability and cost of an event.",
+            "top_codes": ["C", "I", "E"],
+            "top_skills": ["Mathematics", "Critical Thinking"],
+            "top_knowledge": ["Mathematics", "Economics and Accounting"],
+        }
+
+    def test_interest_terms_add_a_smaller_boost_than_an_equivalent_query(self):
+        occ = self._occ()
+        boosted = score_occupation(occ, interest_terms=["Mathematics"])
+        queried = score_occupation(occ, query="Mathematics")
+        assert 0 < boosted < queried
+
+    def test_unrelated_interest_terms_add_nothing(self):
+        occ = self._occ()
+        assert score_occupation(occ, interest_terms=["underwater basket weaving"]) == 0.0
+
+    def test_interest_terms_never_exclude_when_no_riasec_or_query(self):
+        # No riasec_codes/query passed at all -- interest_terms alone should
+        # never raise or force a zero/negative score for a real overlap.
+        occ = self._occ()
+        assert score_occupation(occ, interest_terms=["Mathematics", "Economics"]) > 0
+
+
+class TestInterestTermsHelper:
+    def test_empty_profile_returns_empty_list(self):
+        assert interest_terms(default_profile()) == []
+
+    def test_combines_favorite_subjects_and_all_activity_kinds(self):
+        profile = default_profile()
+        profile["academics"]["favorite_subjects"] = ["Chemistry"]
+        profile["activities"]["clubs"] = ["Robotics Club"]
+        profile["activities"]["sports"] = ["Track"]
+        profile["activities"]["jobs_or_internships"] = ["Lab intern"]
+        assert interest_terms(profile) == ["Chemistry", "Robotics Club", "Track", "Lab intern"]
+
+    def test_gpa_and_test_scores_are_never_included(self):
+        # Deliberate: GPA/ACT/SAT aren't a validated signal for which
+        # occupations to surface, so they must never leak into the
+        # keyword-matching interest terms.
+        profile = default_profile()
+        profile["academics"]["gpa"] = 2.1
+        profile["academics"]["act_score"] = 15
+        assert interest_terms(profile) == []
 
 
 class TestValidateRiasecCodes:
@@ -354,6 +422,17 @@ async def test_search_invalid_riasec_code_raises(fixtures):
             await client.call_tool("career_search", {"riasec_codes": ["Z"]})
 
 
+async def test_search_results_include_tasks_and_work_styles_fields(fixtures):
+    # Synthetic dataset has no tasks/top_work_styles keys at all -- results
+    # must still include the fields (defaulting to []), same as real,
+    # enriched occupations do.
+    async with Client(srv.mcp) as client:
+        r = await client.call_tool("career_search", {"riasec_codes": ["A", "S", "E"]})
+        top = r.data["results"][0]
+        assert top["tasks"] == []
+        assert top["top_work_styles"] == []
+
+
 # --------------------------------------------------------------------------------
 # career_record_feedback
 # --------------------------------------------------------------------------------
@@ -443,6 +522,28 @@ async def test_rank_matches_include_previously_shown_allows_repeat(fixtures):
         )
         socs = [x["soc_code"] for x in r.data["ranked"]]
         assert "15-1252.00" in socs
+
+
+async def test_rank_matches_uses_favorite_subjects_as_interest_signal(fixtures):
+    async with Client(srv.mcp) as client:
+        await client.call_tool(
+            "career_update_profile",
+            {"riasec_scores": _riasec_complete_scores(), "riasec_confidence": "high"},
+        )
+        without = await client.call_tool("career_rank_matches", {"limit": 10})
+        score_without = next(
+            x["match_score"] for x in without.data["ranked"] if x["soc_code"] == "15-2011.00"
+        )
+
+        await client.call_tool(
+            "career_update_profile", {"academics": {"favorite_subjects": ["Mathematics"]}}
+        )
+        with_interest = await client.call_tool("career_rank_matches", {"limit": 10})
+        score_with = next(
+            x["match_score"] for x in with_interest.data["ranked"] if x["soc_code"] == "15-2011.00"
+        )
+        # Actuaries' top_skills/top_knowledge both list Mathematics.
+        assert score_with > score_without
 
 
 async def test_rank_matches_deprioritizes_similar_category_after_dislike(fixtures):

@@ -45,6 +45,7 @@ from .profile_store import (
     CONFIDENCE_LEVELS,
     compute_completeness,
     compute_top_codes,
+    interest_terms,
     load_profile,
     next_step_hint,
     profile_path,
@@ -220,10 +221,20 @@ def career_search(
     question mid-conversation ("what about jobs that mix music and
     computers"), separate from career_rank_matches's use of the student's own
     stored profile. Pass at least one of query (free text matched against
-    title/description/skills/knowledge) or riasec_codes (up to 3 Holland
-    codes, most-preferred first). job_zone_max optionally caps results to
-    occupations at or below that O*NET Job Zone (1=least, 5=most preparation
-    needed)."""
+    title/description/skills/knowledge/tasks/work styles) or riasec_codes (up
+    to 3 Holland codes, most-preferred first). job_zone_max optionally caps
+    results to occupations at or below that O*NET Job Zone (1=least, 5=most
+    preparation needed).
+
+    match_score is literal keyword overlap, not semantic understanding — it
+    will miss a real match phrased differently than O*NET's own wording (e.g.
+    "helping animals" won't surface "Veterinarians" on words alone). If a
+    query that should plausibly have hits comes back empty or thin, re-call
+    with a notably higher limit (20-30) and no riasec_codes filter, then read
+    the returned description/tasks/top_skills yourself and judge fit — you
+    have far better semantic understanding of what the student means than
+    this token-overlap score does. Treat the returned order as a recall net,
+    not the final ranking."""
     if not query and not riasec_codes:
         raise ValueError("Pass at least one of query or riasec_codes.")
     if riasec_codes:
@@ -280,13 +291,20 @@ def career_rank_matches(
     include_previously_shown: bool = False,
 ) -> dict:
     """The primary shortlist tool: combines the student's stored RIASEC top
-    codes with their career_explorations history (deprioritizing/excluding
-    what they've already reacted to) to rank the local O*NET dataset. Returns
-    a soft error (not a raised exception) with a next_step hint if the RIASEC
-    profile isn't complete yet — finish the conversational interview first. By
-    default excludes soc_codes already logged via career_record_feedback so
-    the same career isn't re-presented; pass include_previously_shown=true to
-    allow repeats."""
+    codes, their favorite subjects/clubs/sports/jobs (as a lower-weighted
+    keyword nudge, not a filter), and their career_explorations history
+    (deprioritizing/excluding what they've already reacted to) to rank the
+    local O*NET dataset. Returns a soft error (not a raised exception) with a
+    next_step hint if the RIASEC profile isn't complete yet — finish the
+    conversational interview first. By default excludes soc_codes already
+    logged via career_record_feedback so the same career isn't re-presented;
+    pass include_previously_shown=true to allow repeats.
+
+    match_score is rank-order RIASEC overlap plus keyword overlap — a coarse
+    recall signal, not a semantic judgment. GPA/test scores are intentionally
+    not applied as a filter here (see the career-navigator skill for why);
+    use job_zone_max instead if the conversation has surfaced a real
+    preparation-level constraint."""
     profile = load_profile()
     completeness = compute_completeness(profile)
     if not completeness["riasec"]:
@@ -312,6 +330,7 @@ def career_rank_matches(
     ranked = rank_occupations(
         occupations,
         riasec_codes=top_codes,
+        interest_terms=interest_terms(profile),
         job_zone_max=job_zone_max,
         exclude_soc_codes=exclude_soc_codes,
         disliked_category_pairs=disliked_pairs,

@@ -72,6 +72,24 @@ def load_profile() -> dict[str, Any]:
     return profile
 
 
+def interest_terms(profile: dict[str, Any]) -> list[str]:
+    """Free-text signal derived from the stored profile's favorite subjects
+    and activities (clubs/sports/jobs_or_internships) -- fed into matching.
+    rank_occupations as an additive nudge (matching.py's interest_terms
+    param), never as an exclusionary filter. GPA/act_score/sat_score are
+    deliberately excluded from this: they're academic-achievement numbers,
+    not a validated signal for which occupations to filter out, and this is
+    an exploration tool for students who haven't decided anything yet --
+    they stay in the profile as conversational context only.
+    """
+    academics = profile.get("academics") or {}
+    activities = profile.get("activities") or {}
+    terms = list(academics.get("favorite_subjects") or [])
+    for key in ("clubs", "sports", "jobs_or_internships"):
+        terms.extend(activities.get(key) or [])
+    return terms
+
+
 def compute_top_codes(scores: dict[str, float]) -> list[str]:
     scored = [c for c in RIASEC_CODES if c in scores]
     scored.sort(key=lambda c: (-scores[c], RIASEC_CODES.index(c)))

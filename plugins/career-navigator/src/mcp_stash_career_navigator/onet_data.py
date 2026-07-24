@@ -4,15 +4,17 @@
 30.3 Database (onetcenter.org/database.html), licensed CC BY 4.0 by the U.S.
 Department of Labor / Employment and Training Administration. It was built by
 joining `occupation_data`, `career_interest_types` (RIASEC/Occupational
-Interest scores), `job_zones`, `education`, `essential_skills`, and
-`knowledge`, keeping only the 923 occupations that have RIASEC data and only
-the fields this plugin's matching logic uses. See
+Interest scores), `job_zones`, `education`, `essential_skills`, `knowledge`,
+`task_ratings`, and `work_styles`, keeping only the 923 occupations that have
+RIASEC data and only the fields this plugin's matching logic uses (top tasks
+and top work styles were added later by
+`scripts/enrich_onet_dataset.py` — see that script and
 skills/career-navigator/references/onet-data.md for the full field-by-field
-provenance and attribution text.
+provenance and attribution text).
 
-Committed as a single ~700KB JSON file rather than downloaded on first run:
-every client gets identical, working-offline data the moment they install,
-with no runtime dependency on onetcenter.org staying reachable or unchanged.
+Committed as a single JSON file rather than downloaded on first run: every
+client gets identical, working-offline data the moment they install, with no
+runtime dependency on onetcenter.org staying reachable or unchanged.
 """
 
 from __future__ import annotations

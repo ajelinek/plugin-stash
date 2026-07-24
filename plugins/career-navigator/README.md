@@ -53,7 +53,10 @@ start the conversation once installed.
 - `src/mcp_stash_career_navigator/profile_store.py` /
   `preferences_store.py` — read/write for the two local state files.
 - `src/mcp_stash_career_navigator/data/onet_occupations.json` — the bundled,
-  pre-processed O*NET 30.3 extract (923 occupations, ~700KB).
+  pre-processed O*NET 30.3 extract (923 occupations, ~1.3MB).
+- `scripts/enrich_onet_dataset.py` — re-runnable script that joins O*NET's
+  `task_ratings`/`work_styles` tables onto the dataset above (the `tasks`/
+  `top_work_styles` fields); see onet-data.md for how to re-run it.
 - `src/mcp_stash_common` — symlink to the repo's shared helpers (logging,
   `~/.mcp-stash/career-navigator/` state dir).
 - `tests/test_server.py` — in-memory tests against a small synthetic
