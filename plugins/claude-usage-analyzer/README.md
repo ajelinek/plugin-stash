@@ -59,9 +59,12 @@ Claude projects" to start once installed.
 - `skills/claude-usage-analyzer/references/export-acquisition.md` --
   requesting an account export via an already-available browser-automation
   tool (opt-in, asked every time; this plugin bundles no browser of its
-  own), plus an optional scheduled-recheck flow that completes the
-  download automatically once it's ready, if a scheduling capability is
-  also available.
+  own), then closing the loop once claude.ai emails the download link:
+  checking whether an already-connected mailbox (Gmail, Outlook/Microsoft
+  365, etc.) is the same account and, if so, offering to search for and
+  act on the export-ready message automatically (opt-in, with an optional
+  scheduled recheck); otherwise pausing to ask the user for the download
+  link or the unzipped folder path directly.
 - `skills/claude-usage-analyzer/references/reorganization.md` -- the
   analysis method and the exact `plan` shape that feeds the dashboard.
 - `skills/claude-usage-analyzer/references/dashboard.md` -- rendering,

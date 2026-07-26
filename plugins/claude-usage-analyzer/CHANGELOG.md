@@ -16,10 +16,17 @@ Initial release.
 - Self-contained HTML dashboard renderer with a local history log so
   re-running analysis later shows progress over time.
 - `skills/claude-usage-analyzer/SKILL.md` + reference docs covering data
-  sourcing, opt-in browser-assisted export requesting (with an optional
-  scheduled-recheck flow that completes the download automatically once
-  it's ready, when a scheduling capability is also available), the
-  reorganization analysis method, and dashboard rendering/publishing.
+  sourcing, opt-in browser-assisted export requesting, the reorganization
+  analysis method, and dashboard rendering/publishing.
+- Closing the export-request loop: claude.ai only ever announces a ready
+  export by email (the settings page itself has no ready/pending status),
+  so the acquisition flow discovers the account's own email address and
+  checks whether an already-connected mailbox (Gmail, Outlook/Microsoft
+  365, etc.) is that same account. If so, it offers (opt-in, every time)
+  to search for and act on the export-ready message automatically, with an
+  optional scheduled recheck when a scheduling capability is also
+  available. Otherwise it pauses and asks the user directly for the
+  download link or the unzipped folder path.
 - SessionStart hooks: shared `uv`-on-PATH check, plus a new
   `check_data_access.py` explaining Desktop Space/Project folder-scope
   requirements when no local data is visible.

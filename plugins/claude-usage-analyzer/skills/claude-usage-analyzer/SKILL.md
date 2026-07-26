@@ -80,14 +80,19 @@ Two independent sources, not mutually exclusive:
    - Otherwise, offer to try requesting it via browser automation -- see
      references/export-acquisition.md. This is opt-in and asked explicitly
      every time (no carried-over approval from an earlier session). The
-     zip arrives on claude.ai's own schedule, not instantly, but if a
-     scheduling capability is also available, the same reference doc
-     covers offering one automatic recheck that completes the download
-     itself once it's ready (via `locate_export_download`), instead of
-     just waiting on the user to notice the email. If no browser-automation
-     tool is available, or the user declines either piece, either proceed
-     local-data-only or have them request/download it by hand and hand you
-     the path once unzipped.
+     zip arrives by email on claude.ai's own schedule, not instantly --
+     the account settings page itself never shows a ready/pending status,
+     only email does. The same reference doc covers discovering the
+     claude.ai account's own email address and checking whether an
+     already-connected mailbox (Gmail, Outlook/Microsoft 365, etc.) is
+     that same account; if so, it covers offering to search for and act on
+     the export-ready message automatically (opt-in, with an optional
+     scheduled recheck), instead of just waiting on the user to notice it.
+     If no browser-automation tool is available, no mailbox match is
+     confirmed, or the user declines any piece of it, either proceed
+     local-data-only, or pause and ask the user directly for the download
+     link from the export-ready email (or the unzipped folder path once
+     they've downloaded it themselves).
 
 Say plainly which source(s) ended up in play before presenting any analysis
 -- local-only, export-only, or both -- since that changes how complete the
