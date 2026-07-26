@@ -9,7 +9,8 @@ description: >
   it needs, and what's stale vs. active) and a usage & best-practices review
   (project/chat counts, model-usage breakdown, chats that used a more
   expensive/complex model than the task needed, prompting/context patterns,
-  and evidence-based automation candidates). Uses this plugin's bundled
+  and recommended public skills/plugins/connectors vs. custom ones worth
+  building). Uses this plugin's bundled
   usage_doctor / list_local_workspace / parse_export / render_dashboard MCP
   tools. Trigger on "analyze my Claude usage/chats/projects", "organize my
   Claude workspace", "audit my Claude usage", "reorganize my chats", "find
@@ -35,7 +36,10 @@ dashboard** covering two independent lenses on the same data:
    used a more expensive/complex model than the task actually needed,
    prompting/context patterns worth a look, and evidence-based candidates
    for automation (a recurring manual workflow that could become a Skill,
-   slash command, or scheduled task).
+   slash command, or scheduled task) -- explicitly split into an existing
+   public skill/plugin/connector the user should just install/connect,
+   versus a custom one worth building from scratch when nothing existing
+   fits.
 
 This version does analysis and dashboard generation **only**. It
 deliberately does not (yet):
@@ -141,16 +145,32 @@ above hand you structured data, not conclusions.
 
 See [references/usage-efficiency.md](references/usage-efficiency.md) for
 the full method: right-sizing model choice against task complexity using
-each session/conversation's `models_used` tally, spotting context/prompting
+each session/conversation's model-usage signal, spotting context/prompting
 patterns worth a look, and flagging (with evidence, not a deep build-out)
 recurring manual workflows that look like automation candidates.
 
+Model data isn't uniform across sources -- CLI and Cowork/Chat local
+sessions carry a per-message `models_used` tally (or a `default_model`/
+`effort` fallback); the claude.ai account export never carries model data
+at all (confirmed, not just an occasional gap). See
+[references/data-sources.md](references/data-sources.md) section 5 before
+reporting an empty model-usage result, so it's clear whether nothing was
+found or the source simply can't say.
+
+When an automation candidate or connector-friction pattern turns up,
+don't default to "build a custom Skill" -- check whether an existing
+public Skill, plugin, or connector already covers it first, and label the
+result clearly as one of two kinds: *already available* (install/connect
+something that exists) vs. *worth building custom* (nothing existing
+fits). See usage-efficiency.md's "Recommending skills, plugins &
+connectors" section for how.
+
 This lens works from the same compact per-session/per-conversation
-summaries as Step 4 -- `models_used`, `first_human_message`, `keywords`,
-`tool_names`, `message_count` -- not full transcripts, so it stays cheap
-even on a large account. Only open a specific underlying file directly
-when a summary is genuinely ambiguous and it changes a finding you're
-about to report.
+summaries as Step 4 -- `models_used`/`default_model`, `first_human_message`,
+`keywords`, `tool_names`, `message_count` -- not full transcripts, so it
+stays cheap even on a large account. Only open a specific underlying file
+directly when a summary is genuinely ambiguous and it changes a finding
+you're about to report.
 
 ## Step 6: Render the dashboard
 

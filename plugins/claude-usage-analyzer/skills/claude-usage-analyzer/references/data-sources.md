@@ -13,7 +13,7 @@ what `usage_doctor`/`list_local_workspace` do, not as ground truth).
 
 | macOS/Linux | Windows | Contents |
 |---|---|---|
-| `~/.claude/projects/<encoded-cwd>/*.jsonl` | `%USERPROFILE%\.claude\projects\<encoded-cwd>\*.jsonl` | One file per CLI session. Path is the working directory with `/` -> `-`. `read_cli_sessions` only reads the first few lines for header fields (`cwd`, `timestamp`, `entrypoint`, `gitBranch`) plus a cheap line count -- never the full message content. |
+| `~/.claude/projects/<encoded-cwd>/*.jsonl` | `%USERPROFILE%\.claude\projects\<encoded-cwd>\*.jsonl` | One file per CLI session. Path is the working directory with `/` -> `-`. `read_cli_sessions` reads header fields (`cwd`, `timestamp`, `entrypoint`, `gitBranch`) from the first few lines, plus a cheap total line count -- never the full message content, *except* for one field: every assistant-turn record's `message.model` (confirmed present directly), tallied into a `models_used` count per model id. A session can switch models mid-conversation, so this is a tally across the session, not a single value -- it's the model actually used for that specific reply, not just "the session's model." Assistant records also carry `message.usage` (input/output token counts) if a future pass wants per-model cost, not just counts. |
 | `.../bridge-pointer.json` | same | Present only if that folder was ever opened from Desktop's Code tab -- links a CLI session to a Desktop-side one. |
 | `~/.claude/tasks/<session-uuid>/*.json` | same | TaskCreate/TaskUpdate items for that session. The only real "chats vs. tasks" signal for CLI sessions -- Desktop/Cowork sessions never populate this. |
 
@@ -38,7 +38,8 @@ CLI-family session was launched.
 |---|---|
 | `local-agent-mode-sessions/<account-uuid>/<org-uuid>/spaces.json` | The registry for folder-bound ("Local") Projects, called **Spaces** internally: `{id, name, description, instructions, folders:[{path}]}` per entry. |
 | `.../.project-cache/<project-uuid>/metadata.json` | Cached metadata for non-folder-bound **cloud** Projects opened recently from this device: `{uuid, name, description, synced_at}`. Only a subset of the account's real cloud Projects are cached here -- whichever were opened on this machine. |
-| `.../local_<uuid>.json` | Cowork + Chat-tab session metadata (title, timestamps, `userSelectedFolders`, `userSelectedProjectUuids`, `cliSessionId`). Excludes `claude-code-sessions/<uuid>.json`, which is the Code tab (CLI-in-Desktop) -- a different surface, not read here. |
+| `.../local_<uuid>.json` | Cowork + Chat-tab session metadata (title, timestamps, `userSelectedFolders`, `userSelectedProjectUuids`, `cliSessionId`, and a top-level `model` + `effort` -- e.g. `claude-sonnet-5` / `high`/`xhigh` -- confirmed present, the session's *configured default*, not necessarily what every message actually used if it was changed mid-session). Excludes `claude-code-sessions/<uuid>.json`, which is the Code tab (CLI-in-Desktop) -- a different surface, not read here (its real transcript is the bridged CLI `.jsonl` file in section 1, already carrying its own `models_used`). |
+| `.../local_<uuid>/.claude/projects/<encoded-cwd>/*.jsonl` | Confirmed directly: Cowork keeps its own nested per-session transcript, *same CLI-format JSONL* as section 1 (`message.model` per assistant turn). This is the per-message-accurate source for a Cowork/Chat session -- a real sample came back a different (cheaper) model than the session's configured default, so sub-agents/background steps can run a different model than the one set on the session. `read_cowork_session_transcripts` tallies this, keyed by the same `local_<uuid>` id as the sibling metadata file above, for `build_inventory` to join in. |
 
 `userSelectedFolders` is inconsistently typed -- sometimes bare path
 strings, sometimes `{path: ...}` dicts. `_normalize_folders` handles both.
@@ -84,6 +85,27 @@ report those chats as project-less because the raw link field was blank.
 the authoritative cloud Project registry and web chat history; use local
 data for Cowork Spaces, Chat/Code-tab sessions, CLI sessions, and
 current-state signals. Join Projects on `uuid` to de-duplicate overlap.
+
+## 5. Where model-usage data actually lives
+
+A summary of the confirmed facts scattered through sections 1-2 above, in
+one place, since it's easy to assume this is uniformly available when
+it isn't:
+
+| Source | Model available? | Where |
+|---|---|---|
+| CLI transcripts (`~/.claude/projects/*.jsonl`) | **Yes, per message.** | `message.model` on every assistant-turn record, plus `message.usage` (token counts). Most granular -- a session can switch models mid-conversation. |
+| Nested Cowork transcripts (`local_<uuid>/.claude/projects/.../*.jsonl`) | **Yes, per message.** | Same JSONL format as the CLI store, confirmed directly -- a Cowork session isn't necessarily one model throughout either (sub-agents/background steps can run a cheaper model). |
+| Desktop metadata (`local_<uuid>.json`, both Cowork/Chat and Code-tab stores) | **Yes, session-level.** | Top-level `model` + `effort` fields -- the session's *configured default*, not necessarily every message if it was changed mid-session. Use this when a quick default is good enough, or as a fallback when no nested transcript matched. |
+| Account export (`conversations.json`) | **No.** | Confirmed by direct inspection -- every conversation- and message-level key checked, plus a raw-text regex scan for any key containing "model" across the whole file: zero hits. The web export format simply doesn't record which model generated a response. Not recoverable from export data at all; `parse_export`'s `stats.notes` says so when it detects this. |
+
+For model-usage analysis (see
+[usage-efficiency.md](../references/usage-efficiency.md)): pull from the
+CLI-format transcripts (top-level or nested-in-Cowork) for per-message
+accuracy, or `default_model`/`effort` for a quick session-level fallback.
+If the only source in play is the account export, this signal isn't
+recoverable this run -- say so rather than reporting an empty result as if
+nothing was found.
 
 ## Known limitations
 

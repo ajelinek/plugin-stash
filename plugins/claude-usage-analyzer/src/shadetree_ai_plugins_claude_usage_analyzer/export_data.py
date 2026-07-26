@@ -69,8 +69,15 @@ _MESSAGE_MODEL_KEYS = ("model", "model_slug", "model_id")
 
 
 def _message_model(message: dict[str, Any]) -> str | None:
-    """Export schemas aren't documented, so try a few plausible key names --
-    never assume one is present."""
+    """Try a few plausible key names -- never assume one is present. In
+    practice this has come back empty on every export checked directly (a
+    full per-message and per-conversation key scan, plus a raw-text regex
+    for any key containing "model" across the whole file, found zero hits):
+    the web export format doesn't appear to record which model generated a
+    response at all. Kept defensive anyway since export schemas vary by
+    account/vintage and aren't a documented public API -- if a future
+    export does carry one of these keys, it starts working without a code
+    change."""
     for key in _MESSAGE_MODEL_KEYS:
         value = message.get(key)
         if isinstance(value, str) and value:
@@ -280,11 +287,12 @@ def parse_export(export_dir: str, out_dir: str) -> dict[str, Any]:
     conversations_with_models = sum(1 for c in conversations if c.get("models_used"))
     if conversations_with_messages and conversations_with_models == 0:
         notes.append(
-            "No conversation in this export carries a per-message model field under any of "
-            "the keys this reader checks -- this export schema doesn't expose which model "
-            "answered each chat, so model-usage analysis isn't available from export data "
-            "this run. Local CLI session data (list_local_workspace) is the more reliable "
-            "source for that signal."
+            "No conversation in this export carries a per-message model field -- consistent "
+            "with every export checked directly so far, the claude.ai web export format "
+            "doesn't record which model generated a response at all. Model-usage analysis "
+            "isn't available from export data; it's not just this run's export being unusual. "
+            "list_local_workspace's CLI sessions and Cowork/Chat local sessions are the "
+            "actual source for that signal (see references/data-sources.md)."
         )
 
     stats = {

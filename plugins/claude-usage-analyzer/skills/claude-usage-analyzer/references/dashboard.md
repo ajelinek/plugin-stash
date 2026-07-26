@@ -4,8 +4,8 @@
 see the tool's own docstring for the exact `plan` shape (also documented in
 references/reorganization.md's "The plan" section for the `projects`/
 `leftovers` fields, and references/usage-efficiency.md's "Feeding the
-plan" section for `model_usage`/`findings`). This file covers what to do
-with what it returns: `{path, html, history_runs}`.
+plan" section for `model_usage`/`findings`/`recommendations`). This file
+covers what to do with what it returns: `{path, html, history_runs}`.
 
 ## Try to publish it live, fall back to the local file
 

@@ -35,13 +35,35 @@ Initial release.
   breakdown, chats that used a more expensive/complex model than the task
   needed, context/prompting patterns worth a look, and evidence-based
   (not exhaustive) automation candidates. `list_local_workspace`'s CLI
-  sessions and `parse_export`'s conversations now carry a `models_used`
-  tally (model id -> message count) feeding this, with a data-quality note
-  when an export schema doesn't expose a per-message model field at all.
+  sessions now carry a per-message `models_used` tally (model id ->
+  message count); `parse_export` carries the same field defensively, but
+  it's confirmed empty in practice -- the claude.ai web export format
+  doesn't record which model generated a response at all (checked
+  directly: every conversation/message key, plus a raw-text regex for any
+  "model"-containing key, found zero hits), and `stats.notes` says so.
   New `skills/claude-usage-analyzer/references/usage-efficiency.md`
   covers the method, including looking up the current model lineup each
   session (a "claude-api"-style skill or Anthropic's own docs) rather than
   hardcoding model names that would go stale. `render_dashboard`'s plan
   shape gains `model_usage` and `findings` sections for this.
+- Model-usage data confirmed for Cowork/Chat local sessions too, not just
+  CLI: each keeps its own nested per-session CLI-format transcript
+  (`local_<uuid>/.claude/projects/.../*.jsonl`, same `message.model`
+  format as the top-level CLI store) -- a session isn't necessarily one
+  model throughout, since sub-agents/background steps can run a cheaper
+  model mid-session. `list_local_workspace` now joins this in as
+  `models_used`, falling back to each session's `default_model`/`effort`
+  (its configured default, from `local_<uuid>.json`) when no nested
+  transcript matched. New `skills/claude-usage-analyzer/references/
+  data-sources.md` section 5 summarizes where model data does and doesn't
+  live across every source.
+- The usage & best-practices lens now also recommends skills, plugins,
+  and connectors -- explicitly split into *already available* (an
+  existing public skill/plugin/connector the user should just
+  install/connect, found via whatever discovery capability the
+  environment offers) versus *worth building custom* (nothing existing
+  fits, so a bespoke Skill/plugin is the recommendation instead).
+  `render_dashboard`'s plan shape gains a `recommendations` section for
+  this.
 - Analysis and dashboard generation only -- plan execution and full
   automation mining are deliberately out of scope for this version.

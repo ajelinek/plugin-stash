@@ -170,6 +170,44 @@ def _finding_card(finding: dict[str, Any]) -> str:
     return f'<div class="card">{"".join(parts)}</div>'
 
 
+def _recommendation_card(rec: dict[str, Any]) -> str:
+    title = escape(str(rec.get("title", "(untitled recommendation)")))
+    rationale = escape(str(rec.get("rationale", "")))
+    evidence = rec.get("evidence") or []
+    tag_bits = [b for b in (rec.get("item_type"), rec.get("source")) if b]
+    tag_html = (
+        f'<span class="tag">{escape(" · ".join(str(b) for b in tag_bits))}</span>'
+        if tag_bits
+        else ""
+    )
+
+    parts = [f"<h3>{title}{tag_html}</h3>"]
+    if rationale:
+        parts.append(f"<p>{rationale}</p>")
+    if evidence:
+        parts.append('<div class="field-label">Evidence</div>')
+        parts.append(_list_items([str(e) for e in evidence]))
+    return f'<div class="card">{"".join(parts)}</div>'
+
+
+def _recommendations_section(recommendations: list[dict[str, Any]]) -> str:
+    if not recommendations:
+        return ""
+    existing = [r for r in recommendations if r.get("kind") == "existing"]
+    custom = [r for r in recommendations if r.get("kind") != "existing"]
+
+    parts = [
+        f"<h2>Recommended skills, plugins &amp; connectors ({len(recommendations)})</h2>"
+    ]
+    if existing:
+        parts.append('<div class="field-label">Already available -- install/connect these</div>')
+        parts.extend(_recommendation_card(r) for r in existing)
+    if custom:
+        parts.append('<div class="field-label">Worth building custom</div>')
+        parts.extend(_recommendation_card(r) for r in custom)
+    return "".join(parts)
+
+
 def _model_usage_section(model_usage: list[dict[str, Any]]) -> str:
     if not model_usage:
         return ""
@@ -254,6 +292,7 @@ def render_dashboard_html(plan: dict[str, Any], history: list[dict[str, Any]]) -
     notes = plan.get("notes") or []
     findings = plan.get("findings") or []
     model_usage = plan.get("model_usage") or []
+    recommendations = plan.get("recommendations") or []
 
     sections = [
         f"<h1>{title}</h1>",
@@ -274,6 +313,9 @@ def render_dashboard_html(plan: dict[str, Any], history: list[dict[str, Any]]) -
     if findings:
         sections.append(f"<h2>Usage &amp; best-practices findings ({len(findings)})</h2>")
         sections.extend(_finding_card(f) for f in findings)
+
+    if recommendations:
+        sections.append(_recommendations_section(recommendations))
 
     if projects:
         sections.append(f"<h2>Proposed Projects ({len(projects)})</h2>")

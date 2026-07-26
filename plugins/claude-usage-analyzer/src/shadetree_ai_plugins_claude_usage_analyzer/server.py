@@ -87,13 +87,16 @@ def list_local_workspace() -> dict:
     """Redacted inventory of local Claude Desktop/Cowork/CLI usage: CLI
     session headers (cwd, entrypoint, task-item counts, a `models_used`
     tally of model id -> message count for that session), Desktop Spaces
-    (folder-bound Projects), cached cloud Project metadata, Chat/Cowork
-    session metadata, and the reconstructed chat->Project/Space membership
-    (there is no single index for this -- see
-    references/data-sources.md section 3 for the join logic used here).
-    Secret-shaped keys and heavy MCP tool-schema blobs are stripped before
-    this ever returns. This is a cache, not authoritative -- say so before
-    presenting counts as exact."""
+    (folder-bound Projects), cached cloud Project metadata, and Chat/Cowork
+    session metadata -- each with a `default_model`/`effort` (the
+    session's configured default) plus, when a nested per-session
+    transcript exists, a `models_used` tally joined in for per-message
+    accuracy (a session isn't necessarily one model throughout) -- and the
+    reconstructed chat->Project/Space membership (there is no single index
+    for this -- see references/data-sources.md section 3 for the join
+    logic used here). Secret-shaped keys and heavy MCP tool-schema blobs
+    are stripped before this ever returns. This is a cache, not
+    authoritative -- say so before presenting counts as exact."""
     return local_data.build_inventory()
 
 
@@ -166,6 +169,15 @@ def render_dashboard(plan: dict[str, Any], out_path: str | None = None) -> dict:
         best-practices pattern actually found -- model right-sizing,
         automation candidates, prompting/context patterns; see
         references/usage-efficiency.md),
+      "recommendations": [{"title": str, "kind": "existing"|"custom",
+        "item_type": "skill"|"plugin"|"connector", "source": str
+        (optional, only for "existing" -- which marketplace/registry it
+        came from), "evidence": [str, ...] (optional), "rationale": str}]
+        (optional, one entry per skill/plugin/connector recommendation --
+        "existing" means install/connect something that already exists
+        publicly, "custom" means it's worth building from scratch; see
+        references/usage-efficiency.md's "Recommending skills, plugins &
+        connectors" section),
       "leftovers": [{"name": str, "note": str}],
       "notes": [str, ...] (data-quality caveats),
       "generated_at": str (optional ISO timestamp; defaults to now)
