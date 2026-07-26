@@ -30,5 +30,18 @@ Initial release.
 - SessionStart hooks: shared `uv`-on-PATH check, plus a new
   `check_data_access.py` explaining Desktop Space/Project folder-scope
   requirements when no local data is visible.
-- Analysis and dashboard generation only -- plan execution and automation
-  mining are deliberately out of scope for this version.
+- A second, independent "usage & best-practices" analysis lens alongside
+  the reorganization proposal: project/chat counts, a model-usage
+  breakdown, chats that used a more expensive/complex model than the task
+  needed, context/prompting patterns worth a look, and evidence-based
+  (not exhaustive) automation candidates. `list_local_workspace`'s CLI
+  sessions and `parse_export`'s conversations now carry a `models_used`
+  tally (model id -> message count) feeding this, with a data-quality note
+  when an export schema doesn't expose a per-message model field at all.
+  New `skills/claude-usage-analyzer/references/usage-efficiency.md`
+  covers the method, including looking up the current model lineup each
+  session (a "claude-api"-style skill or Anthropic's own docs) rather than
+  hardcoding model names that would go stale. `render_dashboard`'s plan
+  shape gains `model_usage` and `findings` sections for this.
+- Analysis and dashboard generation only -- plan execution and full
+  automation mining are deliberately out of scope for this version.

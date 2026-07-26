@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 import os
 import platform
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -310,28 +311,53 @@ def join_local_sessions(
 
 _CLI_HEADER_FIELDS = ("cwd", "timestamp", "entrypoint", "gitBranch")
 _CLI_HEADER_SCAN_LINES = 5
+_MODEL_TALLY_MAX_LINES = 20_000
+
+
+def _model_of_cli_record(record: dict[str, Any]) -> str | None:
+    """Assistant-turn records carry the model under `message.model`; check
+    a top-level `model` too, defensively -- never look at message content."""
+    message = record.get("message")
+    if isinstance(message, dict) and isinstance(message.get("model"), str):
+        return message["model"]
+    if isinstance(record.get("model"), str):
+        return record["model"]
+    return None
 
 
 def read_cli_sessions(cli_root: Path) -> list[dict[str, Any]]:
     """One entry per `~/.claude/projects/<encoded-cwd>/*.jsonl` session --
-    header fields only (cwd/timestamp/entrypoint/gitBranch), plus a cheap
-    total line count, never a full parse of message content."""
+    header fields only (cwd/timestamp/entrypoint/gitBranch), a cheap total
+    line count, and a per-model usage tally (model id + count only, never
+    message content, capped at `_MODEL_TALLY_MAX_LINES` per session so one
+    very long-running session can't blow up scan time)."""
     sessions: list[dict[str, Any]] = []
     for jsonl_path in sorted(cli_root.glob("projects/*/*.jsonl")):
         header: dict[str, Any] = {}
         line_count = 0
+        model_counts: Counter[str] = Counter()
         try:
             with jsonl_path.open(encoding="utf-8") as f:
                 for line_count, line in enumerate(f, start=1):  # noqa: B007
+                    # Total line_count always stays exact (the loop itself is
+                    # cheap) -- only the more expensive JSON-parse/model-tally
+                    # work is capped, so one very long session can't blow up
+                    # scan time while event_count stays accurate.
+                    if line_count > _MODEL_TALLY_MAX_LINES:
+                        continue
+                    try:
+                        record = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if not isinstance(record, dict):
+                        continue
                     if line_count <= _CLI_HEADER_SCAN_LINES:
-                        try:
-                            record = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-                        if isinstance(record, dict):
-                            for field in _CLI_HEADER_FIELDS:
-                                if field not in header and field in record:
-                                    header[field] = record[field]
+                        for field in _CLI_HEADER_FIELDS:
+                            if field not in header and field in record:
+                                header[field] = record[field]
+                    model = _model_of_cli_record(record)
+                    if model:
+                        model_counts[model] += 1
         except OSError:
             continue
 
@@ -352,6 +378,7 @@ def read_cli_sessions(cli_root: Path) -> list[dict[str, Any]]:
                 "task_item_count": (
                     len(list(task_dir.glob("*.json"))) if task_dir.is_dir() else 0
                 ),
+                "models_used": dict(model_counts.most_common()),
                 "source_file": str(jsonl_path),
             }
         )

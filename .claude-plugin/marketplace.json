@@ -19,7 +19,7 @@
     {
       "name": "claude-usage-analyzer",
       "source": "./plugins/claude-usage-analyzer",
-      "description": "Analyzes local Claude Desktop/Cowork/CLI usage plus an optional claude.ai account export, and produces a live, self-updating HTML dashboard proposing a workspace reorganization — which chats belong in which Projects, each Project's name/description/custom instructions, and file structure. Read-only analysis; never moves, renames, or deletes anything on its own."
+      "description": "Analyzes local Claude Desktop/Cowork/CLI usage plus an optional claude.ai account export, and produces a live, self-updating HTML dashboard covering a workspace reorganization (which chats belong in which Projects, each Project's name/description/custom instructions, and file structure) and a usage & best-practices review (project/chat counts, model-usage breakdown, chats that used an overly complex model, and evidence-based automation candidates). Read-only analysis; never moves, renames, or deletes anything on its own."
     }
   ]
 }

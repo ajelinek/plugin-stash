@@ -65,6 +65,19 @@ def _tool_names(message: dict[str, Any]) -> set[str]:
     return names
 
 
+_MESSAGE_MODEL_KEYS = ("model", "model_slug", "model_id")
+
+
+def _message_model(message: dict[str, Any]) -> str | None:
+    """Export schemas aren't documented, so try a few plausible key names --
+    never assume one is present."""
+    for key in _MESSAGE_MODEL_KEYS:
+        value = message.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
 def _keywords(text: str, limit: int = 8) -> list[str]:
     tokens = re.findall(r"[a-zA-Z][a-zA-Z0-9_-]{2,}", text.lower())
     counts = Counter(t for t in tokens if t not in _STOPWORDS)
@@ -90,8 +103,12 @@ def summarize_conversation(convo: dict[str, Any]) -> dict[str, Any]:
     first_human_text = _message_text(human_messages[0]) if human_messages else ""
 
     tool_names: set[str] = set()
+    model_counts: Counter[str] = Counter()
     for m in messages:
         tool_names |= _tool_names(m)
+        model = _message_model(m)
+        if model:
+            model_counts[model] += 1
 
     keyword_source = f"{convo.get('name') or ''} {first_human_text}"
 
@@ -105,6 +122,7 @@ def summarize_conversation(convo: dict[str, Any]) -> dict[str, Any]:
         "first_human_message": first_human_text[:FIRST_MESSAGE_PREVIEW_CHARS],
         "tool_names": sorted(tool_names),
         "keywords": _keywords(keyword_source),
+        "models_used": dict(model_counts.most_common()),
     }
 
 
@@ -256,6 +274,17 @@ def parse_export(export_dir: str, out_dir: str) -> dict[str, Any]:
             "this export schema doesn't carry a per-conversation project link. Reconstruct "
             "membership from memory_context.md's per-project sections and "
             "name/keyword similarity instead of treating these chats as unaffiliated."
+        )
+
+    conversations_with_messages = sum(1 for c in conversations if c.get("message_count"))
+    conversations_with_models = sum(1 for c in conversations if c.get("models_used"))
+    if conversations_with_messages and conversations_with_models == 0:
+        notes.append(
+            "No conversation in this export carries a per-message model field under any of "
+            "the keys this reader checks -- this export schema doesn't expose which model "
+            "answered each chat, so model-usage analysis isn't available from export data "
+            "this run. Local CLI session data (list_local_workspace) is the more reliable "
+            "source for that signal."
         )
 
     stats = {
