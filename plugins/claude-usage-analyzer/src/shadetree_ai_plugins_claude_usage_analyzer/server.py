@@ -85,14 +85,18 @@ def usage_doctor() -> dict:
 @mcp.tool(annotations=_READ_ONLY)
 def list_local_workspace() -> dict:
     """Redacted inventory of local Claude Desktop/Cowork/CLI usage: CLI
-    session headers (cwd, entrypoint, task-item counts), Desktop Spaces
-    (folder-bound Projects), cached cloud Project metadata, Chat/Cowork
-    session metadata, and the reconstructed chat->Project/Space membership
-    (there is no single index for this -- see
-    references/data-sources.md section 3 for the join logic used here).
-    Secret-shaped keys and heavy MCP tool-schema blobs are stripped before
-    this ever returns. This is a cache, not authoritative -- say so before
-    presenting counts as exact."""
+    session headers (cwd, entrypoint, task-item counts, a `models_used`
+    tally of model id -> message count for that session), Desktop Spaces
+    (folder-bound Projects), cached cloud Project metadata, and Chat/Cowork
+    session metadata -- each with a `default_model`/`effort` (the
+    session's configured default) plus, when a nested per-session
+    transcript exists, a `models_used` tally joined in for per-message
+    accuracy (a session isn't necessarily one model throughout) -- and the
+    reconstructed chat->Project/Space membership (there is no single index
+    for this -- see references/data-sources.md section 3 for the join
+    logic used here). Secret-shaped keys and heavy MCP tool-schema blobs
+    are stripped before this ever returns. This is a cache, not
+    authoritative -- say so before presenting counts as exact."""
     return local_data.build_inventory()
 
 
@@ -130,9 +134,12 @@ def parse_export(export_dir: str, out_dir: str | None = None) -> dict:
     Data, unzipped -- must contain conversations.json) into
     conversations.jsonl / projects_index.json / memory_context.md /
     stats.json under out_dir (defaults to a plugin state subdirectory),
-    instead of holding the raw export in context. Check the returned
-    stats.notes for data-quality caveats (thin corpus, missing
-    project links, etc.) before analyzing further."""
+    instead of holding the raw export in context. Each conversation record
+    in conversations.jsonl includes a `models_used` tally (model id ->
+    message count) when the export schema happens to carry one. Check the
+    returned stats.notes for data-quality caveats (thin corpus, missing
+    project links, no per-message model field, etc.) before analyzing
+    further."""
     resolved_out_dir = out_dir or str(Path(_default_state_dir()) / "export-parsed")
     return export_data.parse_export(export_dir, resolved_out_dir)
 
@@ -154,6 +161,23 @@ def render_dashboard(plan: dict[str, Any], out_path: str | None = None) -> dict:
         "instructions": str (optional, the Project's custom
         instructions), "chats": [str, ...], "files": [str, ...],
         "status": str (optional, e.g. "new"/"existing"/"rename")}],
+      "model_usage": [{"model": str, "count": int}] (optional, sorted
+        descending by count -- from the usage & best-practices lens),
+      "findings": [{"title": str, "severity": str (optional, "info"/
+        "warning"/"critical"), "evidence": [str, ...] (optional),
+        "recommendation": str}] (optional, one entry per usage/
+        best-practices pattern actually found -- model right-sizing,
+        automation candidates, prompting/context patterns; see
+        references/usage-efficiency.md),
+      "recommendations": [{"title": str, "kind": "existing"|"custom",
+        "item_type": "skill"|"plugin"|"connector", "source": str
+        (optional, only for "existing" -- which marketplace/registry it
+        came from), "evidence": [str, ...] (optional), "rationale": str}]
+        (optional, one entry per skill/plugin/connector recommendation --
+        "existing" means install/connect something that already exists
+        publicly, "custom" means it's worth building from scratch; see
+        references/usage-efficiency.md's "Recommending skills, plugins &
+        connectors" section),
       "leftovers": [{"name": str, "note": str}],
       "notes": [str, ...] (data-quality caveats),
       "generated_at": str (optional ISO timestamp; defaults to now)

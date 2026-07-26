@@ -23,7 +23,12 @@ from html import escape
 from pathlib import Path
 from typing import Any
 
-_STATUS_ICON = {"good": "\U0001f7e2", "warning": "\U0001f7e1", "critical": "\U0001f534"}
+_STATUS_ICON = {
+    "good": "\U0001f7e2",
+    "warning": "\U0001f7e1",
+    "critical": "\U0001f534",
+    "info": "\U0001f535",
+}
 
 _STYLE = """
 :root { color-scheme: light; }
@@ -84,6 +89,15 @@ table.history th, table.history td { text-align: left; padding: 0.35rem 0.6rem;
 table.history th { color: var(--ink-muted); font-weight: 600; }
 .bars { display: flex; align-items: flex-end; gap: 3px; height: 32px; margin-top: 0.4rem; }
 .bars .bar { width: 8px; background: var(--accent); border-radius: 2px 2px 0 0; }
+.model-usage { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+  padding: 0.85rem 1.1rem; margin-bottom: 1rem; }
+.model-row { display: grid; grid-template-columns: minmax(120px, 1fr) 3fr auto;
+  align-items: center; gap: 0.6rem; padding: 0.3rem 0; }
+.model-name { font-size: 0.85rem; color: var(--ink-2); overflow-wrap: anywhere; }
+.model-bar-track { background: var(--grid); border-radius: 999px; height: 10px; overflow: hidden; }
+.model-bar { background: var(--accent); height: 100%; border-radius: 999px; }
+.model-count { font-size: 0.85rem; color: var(--ink-2); font-variant-numeric: tabular-nums;
+  text-align: right; }
 footer { color: var(--ink-muted); font-size: 0.8rem; margin-top: 3rem; }
 """
 
@@ -140,6 +154,78 @@ def _leftover_card(item: dict[str, Any]) -> str:
     name = escape(str(item.get("name", "(unnamed)")))
     note = escape(str(item.get("note", "")))
     return f'<div class="card"><h3>{name}</h3>{f"<p>{note}</p>" if note else ""}</div>'
+
+
+def _finding_card(finding: dict[str, Any]) -> str:
+    title = escape(str(finding.get("title", "(untitled finding)")))
+    recommendation = escape(str(finding.get("recommendation", "")))
+    evidence = finding.get("evidence") or []
+
+    parts = [f"<h3>{title}</h3>", _fmt_status(finding.get("severity"))]
+    if recommendation:
+        parts.append(f"<p>{recommendation}</p>")
+    if evidence:
+        parts.append('<div class="field-label">Evidence</div>')
+        parts.append(_list_items([str(e) for e in evidence]))
+    return f'<div class="card">{"".join(parts)}</div>'
+
+
+def _recommendation_card(rec: dict[str, Any]) -> str:
+    title = escape(str(rec.get("title", "(untitled recommendation)")))
+    rationale = escape(str(rec.get("rationale", "")))
+    evidence = rec.get("evidence") or []
+    tag_bits = [b for b in (rec.get("item_type"), rec.get("source")) if b]
+    tag_html = (
+        f'<span class="tag">{escape(" · ".join(str(b) for b in tag_bits))}</span>'
+        if tag_bits
+        else ""
+    )
+
+    parts = [f"<h3>{title}{tag_html}</h3>"]
+    if rationale:
+        parts.append(f"<p>{rationale}</p>")
+    if evidence:
+        parts.append('<div class="field-label">Evidence</div>')
+        parts.append(_list_items([str(e) for e in evidence]))
+    return f'<div class="card">{"".join(parts)}</div>'
+
+
+def _recommendations_section(recommendations: list[dict[str, Any]]) -> str:
+    if not recommendations:
+        return ""
+    existing = [r for r in recommendations if r.get("kind") == "existing"]
+    custom = [r for r in recommendations if r.get("kind") != "existing"]
+
+    parts = [
+        f"<h2>Recommended skills, plugins &amp; connectors ({len(recommendations)})</h2>"
+    ]
+    if existing:
+        parts.append('<div class="field-label">Already available -- install/connect these</div>')
+        parts.extend(_recommendation_card(r) for r in existing)
+    if custom:
+        parts.append('<div class="field-label">Worth building custom</div>')
+        parts.extend(_recommendation_card(r) for r in custom)
+    return "".join(parts)
+
+
+def _model_usage_section(model_usage: list[dict[str, Any]]) -> str:
+    if not model_usage:
+        return ""
+    max_count = max((float(m.get("count") or 0) for m in model_usage), default=0) or 1
+    rows = []
+    for m in model_usage:
+        model = escape(str(m.get("model", "(unknown)")))
+        count = m.get("count", 0)
+        pct = max(4, round(float(count or 0) / max_count * 100))
+        rows.append(
+            '<div class="model-row">'
+            f'<div class="model-name">{model}</div>'
+            f'<div class="model-bar-track"><div class="model-bar" '
+            f'style="width:{pct}%"></div></div>'
+            f'<div class="model-count">{escape(str(count))}</div>'
+            "</div>"
+        )
+    return '<h2>Model usage</h2><div class="model-usage">' + "".join(rows) + "</div>"
 
 
 def _mini_bars(values: list[float]) -> str:
@@ -204,6 +290,9 @@ def render_dashboard_html(plan: dict[str, Any], history: list[dict[str, Any]]) -
     projects = plan.get("projects") or []
     leftovers = plan.get("leftovers") or []
     notes = plan.get("notes") or []
+    findings = plan.get("findings") or []
+    model_usage = plan.get("model_usage") or []
+    recommendations = plan.get("recommendations") or []
 
     sections = [
         f"<h1>{title}</h1>",
@@ -221,9 +310,19 @@ def render_dashboard_html(plan: dict[str, Any], history: list[dict[str, Any]]) -
             '<div class="stat-grid">' + "".join(_stat_tile(t) for t in stat_tiles) + "</div>"
         )
 
+    if findings:
+        sections.append(f"<h2>Usage &amp; best-practices findings ({len(findings)})</h2>")
+        sections.extend(_finding_card(f) for f in findings)
+
+    if recommendations:
+        sections.append(_recommendations_section(recommendations))
+
     if projects:
         sections.append(f"<h2>Proposed Projects ({len(projects)})</h2>")
         sections.extend(_project_card(p) for p in projects)
+
+    if model_usage:
+        sections.append(_model_usage_section(model_usage))
 
     if leftovers:
         sections.append(f"<h2>Leftovers ({len(leftovers)})</h2>")

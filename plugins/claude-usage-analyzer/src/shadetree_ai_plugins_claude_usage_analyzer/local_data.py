@@ -16,6 +16,10 @@ Three product surfaces, three different local stores:
   OS-specific app-data directory. Cowork "Projects" that are folder-bound
   are called "Spaces" internally (``spaces.json``); non-folder-bound cloud
   Projects are cached separately (``.project-cache/<uuid>/metadata.json``).
+  Each Cowork/Chat session also keeps its own nested CLI-format JSONL
+  transcript (``local_<uuid>/.claude/projects/.../*.jsonl``) alongside its
+  ``local_<uuid>.json`` metadata -- confirmed directly, same
+  ``message.model``-per-line format as the top-level CLI store.
 - The claude.ai account data export (``conversations.json`` etc.) is a
   *different* thing entirely, handled by ``export_data.py`` -- it covers
   claude.ai web chats only and has zero overlap with what lives here.
@@ -26,6 +30,7 @@ from __future__ import annotations
 import json
 import os
 import platform
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -179,6 +184,72 @@ def _load_json(path: Path) -> Any | None:
 
 
 # --------------------------------------------------------------------------------
+# Shared JSONL transcript scanning -- the CLI's top-level store and Cowork's
+# nested per-session transcripts (see read_cowork_session_transcripts below)
+# are both the same CLI-format JSONL: one JSON object per line, assistant
+# turns carrying `message.model`. Confirmed directly against real Cowork
+# session transcripts -- a session isn't necessarily one model throughout;
+# sub-agents/background steps can run a cheaper model mid-session, so this
+# tallies model usage rather than assuming a single value per session.
+# --------------------------------------------------------------------------------
+
+_MODEL_TALLY_MAX_LINES = 20_000
+
+
+def _model_of_cli_record(record: dict[str, Any]) -> str | None:
+    """Assistant-turn records carry the model under `message.model`; check
+    a top-level `model` too, defensively -- never look at message content."""
+    message = record.get("message")
+    if isinstance(message, dict) and isinstance(message.get("model"), str):
+        return message["model"]
+    if isinstance(record.get("model"), str):
+        return record["model"]
+    return None
+
+
+def _scan_jsonl(
+    path: Path,
+    max_model_lines: int,
+    header_fields: tuple[str, ...] = (),
+    header_scan_lines: int = 0,
+) -> tuple[dict[str, Any], Counter[str], int]:
+    """One pass over a CLI-format JSONL transcript: optionally pull header
+    fields from the first `header_scan_lines` lines, and always tally
+    `_model_of_cli_record` across the first `max_model_lines` (model id +
+    count only, never message content). The exact total line count is
+    always returned -- iterating text lines is cheap even past the cap;
+    only the JSON-parse/tally work is capped, so one very long transcript
+    can't blow up scan time.
+
+    Raises `OSError` if `path` can't be opened at all -- callers decide
+    whether that means skipping just this file's contribution or the
+    whole session it belongs to; a malformed *line* within an openable
+    file is always skipped silently instead, never raised."""
+    header: dict[str, Any] = {}
+    model_counts: Counter[str] = Counter()
+    line_count = 0
+    with path.open(encoding="utf-8") as f:
+        for line_count, line in enumerate(f, start=1):  # noqa: B007
+            if line_count > max_model_lines and line_count > header_scan_lines:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(record, dict):
+                continue
+            if header_fields and line_count <= header_scan_lines:
+                for field in header_fields:
+                    if field not in header and field in record:
+                        header[field] = record[field]
+            if line_count <= max_model_lines:
+                model = _model_of_cli_record(record)
+                if model:
+                    model_counts[model] += 1
+    return header, model_counts, line_count
+
+
+# --------------------------------------------------------------------------------
 # Desktop / Cowork readers
 # --------------------------------------------------------------------------------
 
@@ -232,7 +303,11 @@ def read_project_cache(base_dir: Path) -> list[dict[str, Any]]:
 def read_local_sessions(base_dir: Path) -> list[dict[str, Any]]:
     """Cowork + Chat-tab session metadata (`local_<uuid>.json`), redacted.
     Deliberately excludes `claude-code-sessions/` -- that's the Code tab
-    (CLI-in-Desktop), a different product surface from Cowork/Chat."""
+    (CLI-in-Desktop), a different product surface from Cowork/Chat.
+    `default_model`/`effort` are this session's *configured default*
+    (confirmed present at the top level of this file) -- not necessarily
+    what every message actually used if it was changed mid-session; join
+    against `read_cowork_session_transcripts` for per-message accuracy."""
     sessions: list[dict[str, Any]] = []
     for session_path in sorted(base_dir.glob("local-agent-mode-sessions/*/*/local_*.json")):
         data = _load_json(session_path)
@@ -248,10 +323,46 @@ def read_local_sessions(base_dir: Path) -> list[dict[str, Any]]:
                 "user_selected_folders": _normalize_folders(data.get("userSelectedFolders")),
                 "user_selected_project_uuids": data.get("userSelectedProjectUuids") or [],
                 "cli_session_id": data.get("cliSessionId"),
+                "default_model": data.get("model"),
+                "effort": data.get("effort"),
                 "source_file": str(session_path),
             }
         )
     return sessions
+
+
+_COWORK_TRANSCRIPT_GLOB = "local-agent-mode-sessions/*/*/local_*/.claude/projects/*/*.jsonl"
+
+
+def read_cowork_session_transcripts(base_dir: Path) -> dict[str, dict[str, Any]]:
+    """Cowork keeps its own nested per-session CLI-format transcript at
+    `local-agent-mode-sessions/<account>/<org>/local_<uuid>/.claude/
+    projects/<encoded-cwd>/*.jsonl` -- confirmed directly, same
+    `message.model`-per-line format as the top-level CLI store (see
+    `_scan_jsonl`), just scoped to that one session's sandboxed working
+    directory. Keyed by session id (the `local_<uuid>` directory name,
+    matching `read_local_sessions`' `id`) so a caller can join per-message
+    model accuracy onto that session's metadata. A session can have more
+    than one matching transcript file (e.g. it touched more than one
+    working directory); tallies are summed across all of them."""
+    tallies: dict[str, tuple[Counter[str], int]] = {}
+    for jsonl_path in sorted(base_dir.glob(_COWORK_TRANSCRIPT_GLOB)):
+        session_id = jsonl_path.parents[3].name
+        try:
+            _, model_counts, line_count = _scan_jsonl(jsonl_path, _MODEL_TALLY_MAX_LINES)
+        except OSError:
+            continue
+        existing_counts, existing_lines = tallies.get(session_id, (Counter(), 0))
+        existing_counts.update(model_counts)
+        tallies[session_id] = (existing_counts, existing_lines + line_count)
+
+    return {
+        session_id: {
+            "models_used": dict(counts.most_common()),
+            "transcript_event_count": lines,
+        }
+        for session_id, (counts, lines) in tallies.items()
+    }
 
 
 def _folder_matches_space(session_folders: list[str], space_folders: list[str]) -> bool:
@@ -314,24 +425,18 @@ _CLI_HEADER_SCAN_LINES = 5
 
 def read_cli_sessions(cli_root: Path) -> list[dict[str, Any]]:
     """One entry per `~/.claude/projects/<encoded-cwd>/*.jsonl` session --
-    header fields only (cwd/timestamp/entrypoint/gitBranch), plus a cheap
-    total line count, never a full parse of message content."""
+    header fields only (cwd/timestamp/entrypoint/gitBranch), a cheap total
+    line count, and a per-model usage tally (model id + count only, never
+    message content; see `_scan_jsonl`)."""
     sessions: list[dict[str, Any]] = []
     for jsonl_path in sorted(cli_root.glob("projects/*/*.jsonl")):
-        header: dict[str, Any] = {}
-        line_count = 0
         try:
-            with jsonl_path.open(encoding="utf-8") as f:
-                for line_count, line in enumerate(f, start=1):  # noqa: B007
-                    if line_count <= _CLI_HEADER_SCAN_LINES:
-                        try:
-                            record = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-                        if isinstance(record, dict):
-                            for field in _CLI_HEADER_FIELDS:
-                                if field not in header and field in record:
-                                    header[field] = record[field]
+            header, model_counts, line_count = _scan_jsonl(
+                jsonl_path,
+                _MODEL_TALLY_MAX_LINES,
+                header_fields=_CLI_HEADER_FIELDS,
+                header_scan_lines=_CLI_HEADER_SCAN_LINES,
+            )
         except OSError:
             continue
 
@@ -352,6 +457,7 @@ def read_cli_sessions(cli_root: Path) -> list[dict[str, Any]]:
                 "task_item_count": (
                     len(list(task_dir.glob("*.json"))) if task_dir.is_dir() else 0
                 ),
+                "models_used": dict(model_counts.most_common()),
                 "source_file": str(jsonl_path),
             }
         )
@@ -385,6 +491,14 @@ def build_inventory() -> dict[str, Any]:
         spaces = read_spaces(base_dir)
         project_cache = read_project_cache(base_dir)
         local_sessions = read_local_sessions(base_dir)
+
+        transcript_models = read_cowork_session_transcripts(base_dir)
+        for session in local_sessions:
+            match = transcript_models.get(session["id"])
+            if match:
+                session["models_used"] = match["models_used"]
+                session["transcript_event_count"] = match["transcript_event_count"]
+
         result["spaces"] = spaces
         result["project_cache"] = project_cache
         result["local_sessions"] = [redact(s) for s in local_sessions]

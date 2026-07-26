@@ -3,14 +3,19 @@ name: claude-usage-analyzer
 description: >
   Analyzes how the user actually uses Claude -- local Claude Desktop/Cowork/
   CLI data on this machine, plus an optional claude.ai account data export --
-  and produces a live, self-updating HTML dashboard proposing how to
-  reorganize their workspace: which chats belong in which Projects, each
+  and produces a live, self-updating HTML dashboard covering both a
+  workspace reorganization (which chats belong in which Projects, each
   Project's name/description/custom instructions, what file/folder structure
-  it needs, and what's stale vs. active. Uses this plugin's bundled
+  it needs, and what's stale vs. active) and a usage & best-practices review
+  (project/chat counts, model-usage breakdown, chats that used a more
+  expensive/complex model than the task needed, prompting/context patterns,
+  and recommended public skills/plugins/connectors vs. custom ones worth
+  building). Uses this plugin's bundled
   usage_doctor / list_local_workspace / parse_export / render_dashboard MCP
   tools. Trigger on "analyze my Claude usage/chats/projects", "organize my
   Claude workspace", "audit my Claude usage", "reorganize my chats", "find
-  patterns in my conversations", "how am I using Claude", or when handed a
+  patterns in my conversations", "how am I using Claude", "am I using the
+  right models", "how can I optimize my Claude usage", or when handed a
   claude.ai data export folder. Analysis and dashboard generation only --
   it never moves, renames, or deletes a chat or Project itself.
 ---
@@ -21,9 +26,20 @@ description: >
 
 A read-only analysis of the user's own Claude usage, combining up to two
 sources of data, ending in a single reviewable deliverable: a **live HTML
-dashboard** proposing a workspace reorganization (Projects to create, which
-existing chats move into each, each Project's name/description/custom
-instructions, and what file/folder structure it needs).
+dashboard** covering two independent lenses on the same data:
+
+1. A **workspace reorganization** proposal (Projects to create, which
+   existing chats move into each, each Project's name/description/custom
+   instructions, and what file/folder structure it needs).
+2. A **usage & best-practices review**: how many Projects/chats exist and
+   how they break down, which models got used where and whether any chat
+   used a more expensive/complex model than the task actually needed,
+   prompting/context patterns worth a look, and evidence-based candidates
+   for automation (a recurring manual workflow that could become a Skill,
+   slash command, or scheduled task) -- explicitly split into an existing
+   public skill/plugin/connector the user should just install/connect,
+   versus a custom one worth building from scratch when nothing existing
+   fits.
 
 This version does analysis and dashboard generation **only**. It
 deliberately does not (yet):
@@ -31,9 +47,12 @@ deliberately does not (yet):
 - **Execute** the plan -- actually creating/renaming Projects or moving
   chats in the claude.ai UI. That needs its own browser-driven build and is
   future work; for now, hand the reviewed plan over as a checklist.
-- **Automation mining** -- recommending which recurring workflows should
-  become a Skill or a scheduled task. A different lens on the same kind of
-  data, also future work; don't build it ad hoc here.
+- **Full automation mining** -- a dedicated program that clusters every
+  recurring workflow across the account and builds out Skill/scheduled-task
+  recommendations in depth. The usage & best-practices lens above does
+  flag automation *candidates* it notices as a side effect of the same
+  analysis, with evidence, but it doesn't go looking for them exhaustively
+  or design the automation itself -- that deeper pass is still future work.
 
 Say so plainly if the user asks for either -- don't half-build them.
 
@@ -80,14 +99,19 @@ Two independent sources, not mutually exclusive:
    - Otherwise, offer to try requesting it via browser automation -- see
      references/export-acquisition.md. This is opt-in and asked explicitly
      every time (no carried-over approval from an earlier session). The
-     zip arrives on claude.ai's own schedule, not instantly, but if a
-     scheduling capability is also available, the same reference doc
-     covers offering one automatic recheck that completes the download
-     itself once it's ready (via `locate_export_download`), instead of
-     just waiting on the user to notice the email. If no browser-automation
-     tool is available, or the user declines either piece, either proceed
-     local-data-only or have them request/download it by hand and hand you
-     the path once unzipped.
+     zip arrives by email on claude.ai's own schedule, not instantly --
+     the account settings page itself never shows a ready/pending status,
+     only email does. The same reference doc covers discovering the
+     claude.ai account's own email address and checking whether an
+     already-connected mailbox (Gmail, Outlook/Microsoft 365, etc.) is
+     that same account; if so, it covers offering to search for and act on
+     the export-ready message automatically (opt-in, with an optional
+     scheduled recheck), instead of just waiting on the user to notice it.
+     If no browser-automation tool is available, no mailbox match is
+     confirmed, or the user declines any piece of it, either proceed
+     local-data-only, or pause and ask the user directly for the download
+     link from the export-ready email (or the unzipped folder path once
+     they've downloaded it themselves).
 
 Say plainly which source(s) ended up in play before presenting any analysis
 -- local-only, export-only, or both -- since that changes how complete the
@@ -117,14 +141,46 @@ analytical work -- deciding "these conversations are one real project"
 takes understanding the content, not just clustering keywords; the tools
 above hand you structured data, not conclusions.
 
-## Step 5: Render the dashboard
+## Step 5: Analyze (usage & best-practices lens)
 
-Build the `plan` dict per `render_dashboard`'s documented shape and call it.
-See [references/dashboard.md](references/dashboard.md) for the exact
-fields, the Artifact-publish-if-available fallback logic, and how the
-history log makes re-runs show progress over time.
+See [references/usage-efficiency.md](references/usage-efficiency.md) for
+the full method: right-sizing model choice against task complexity using
+each session/conversation's model-usage signal, spotting context/prompting
+patterns worth a look, and flagging (with evidence, not a deep build-out)
+recurring manual workflows that look like automation candidates.
 
-## Step 6: Present and get explicit review
+Model data isn't uniform across sources -- CLI and Cowork/Chat local
+sessions carry a per-message `models_used` tally (or a `default_model`/
+`effort` fallback); the claude.ai account export never carries model data
+at all (confirmed, not just an occasional gap). See
+[references/data-sources.md](references/data-sources.md) section 5 before
+reporting an empty model-usage result, so it's clear whether nothing was
+found or the source simply can't say.
+
+When an automation candidate or connector-friction pattern turns up,
+don't default to "build a custom Skill" -- check whether an existing
+public Skill, plugin, or connector already covers it first, and label the
+result clearly as one of two kinds: *already available* (install/connect
+something that exists) vs. *worth building custom* (nothing existing
+fits). See usage-efficiency.md's "Recommending skills, plugins &
+connectors" section for how.
+
+This lens works from the same compact per-session/per-conversation
+summaries as Step 4 -- `models_used`/`default_model`, `first_human_message`,
+`keywords`, `tool_names`, `message_count` -- not full transcripts, so it
+stays cheap even on a large account. Only open a specific underlying file
+directly when a summary is genuinely ambiguous and it changes a finding
+you're about to report.
+
+## Step 6: Render the dashboard
+
+Build the `plan` dict per `render_dashboard`'s documented shape (including
+this step's `findings` and `model_usage`, alongside Step 4's `projects`/
+`leftovers`) and call it. See [references/dashboard.md](references/dashboard.md)
+for the exact fields, the Artifact-publish-if-available fallback logic,
+and how the history log makes re-runs show progress over time.
+
+## Step 7: Present and get explicit review
 
 Stop after rendering. Point the user at the dashboard (its path, and the
 live Artifact link if one was published) and ask them to confirm, edit, or
@@ -145,8 +201,9 @@ underlying files directly.
 
 ## Non-goals
 
-- Not a bulk-mover or bulk-deleter -- this skill only ever proposes; Step 6
+- Not a bulk-mover or bulk-deleter -- this skill only ever proposes; Step 7
   is where it stops.
-- Not a substitute for the user's own judgment on naming/scope -- the
-  dashboard is a strong starting proposal, not a final answer.
-- Not automation mining, and not plan execution -- see "What this is."
+- Not a substitute for the user's own judgment on naming/scope, or on
+  which model to use -- the dashboard is a strong starting proposal, not a
+  final answer.
+- Not full automation mining, and not plan execution -- see "What this is."

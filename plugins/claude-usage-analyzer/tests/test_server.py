@@ -47,6 +47,20 @@ class TestRedact:
         assert redacted == [{"name": "ok"}]
 
 
+class TestModelOfCliRecord:
+    def test_message_model_field(self):
+        assert local_data._model_of_cli_record({"message": {"model": "claude-x"}}) == "claude-x"
+
+    def test_top_level_model_field(self):
+        assert local_data._model_of_cli_record({"model": "claude-y"}) == "claude-y"
+
+    def test_missing_returns_none(self):
+        assert local_data._model_of_cli_record({"type": "user"}) is None
+
+    def test_non_string_model_ignored(self):
+        assert local_data._model_of_cli_record({"message": {"model": 5}}) is None
+
+
 class TestNormalizeFolders:
     def test_bare_strings(self):
         assert local_data._normalize_folders(["/a", "/b"]) == ["/a", "/b"]
@@ -153,6 +167,7 @@ def workspace_fixture(tmp_path, monkeypatch):
         "title": "Chat in Space", "createdAt": "2026-01-01T00:00:00Z",
         "userSelectedFolders": ["/Users/x/proj1/sub"], "userSelectedProjectUuids": [],
         "enabledMcpTools": {"huge": "blob"}, "authToken": "shhh",
+        "model": "claude-sonnet-5", "effort": "high",
     })
     _write_json(org_dir / "local_sess2.json", {
         "title": "Chat in Cloud Project", "createdAt": "2026-01-02T00:00:00Z",
@@ -166,6 +181,22 @@ def workspace_fixture(tmp_path, monkeypatch):
     _write_json(desktop_root / "claude-code-sessions" / "ACCOUNT" / "ORG" / "local_codetab.json", {
         "title": "should be excluded",
     })
+
+    # Nested Cowork transcript for local_sess2 -- same CLI-format JSONL as the
+    # top-level CLI store, confirming a session isn't necessarily one model
+    # throughout (a cheaper model ran mid-session here).
+    cowork_transcript = (
+        org_dir / "local_sess2" / ".claude" / "projects" / "proj" / "sub-session.jsonl"
+    )
+    cowork_transcript.parent.mkdir(parents=True)
+    with cowork_transcript.open("w", encoding="utf-8") as f:
+        f.write(json.dumps(
+            {"type": "assistant", "message": {"model": "claude-sonnet-5", "role": "assistant"}}
+        ) + "\n")
+        f.write(json.dumps(
+            {"type": "assistant",
+             "message": {"model": "claude-haiku-4-5-20251001", "role": "assistant"}}
+        ) + "\n")
 
     monkeypatch.setattr(local_data, "cli_dir", lambda: cli_root)
     monkeypatch.setattr(local_data, "desktop_dir_candidates", lambda: [desktop_root])
@@ -185,6 +216,32 @@ async def test_list_local_workspace_cli_sessions(workspace_fixture):
         assert s["event_count"] == 3
         assert s["bridged_to_desktop"] is True
         assert s["task_item_count"] == 2
+
+
+def test_read_cli_sessions_tallies_models(tmp_path):
+    cli_root = tmp_path / ".claude"
+    project_dir = cli_root / "projects" / "-Users-x-proj"
+    project_dir.mkdir(parents=True)
+    jsonl_path = project_dir / "sess.jsonl"
+    with jsonl_path.open("w", encoding="utf-8") as f:
+        f.write(json.dumps({
+            "cwd": "/x", "timestamp": "t", "entrypoint": "cli", "type": "user",
+        }) + "\n")
+        f.write(json.dumps(
+            {"type": "assistant", "message": {"model": "claude-sonnet-5", "role": "assistant"}}
+        ) + "\n")
+        f.write(json.dumps(
+            {"type": "assistant", "message": {"model": "claude-sonnet-5", "role": "assistant"}}
+        ) + "\n")
+        f.write(json.dumps(
+            {"type": "assistant", "message": {"model": "claude-haiku-4-5", "role": "assistant"}}
+        ) + "\n")
+        f.write(json.dumps({"type": "user"}) + "\n")
+
+    sessions = local_data.read_cli_sessions(cli_root)
+    assert len(sessions) == 1
+    assert sessions[0]["models_used"] == {"claude-sonnet-5": 2, "claude-haiku-4-5": 1}
+    assert sessions[0]["event_count"] == 5
 
 
 async def test_list_local_workspace_excludes_code_tab_sessions(workspace_fixture):
@@ -210,6 +267,57 @@ async def test_list_local_workspace_spaces_and_project_cache(workspace_fixture):
         assert r.data["spaces"][0]["name"] == "Space One"
         assert r.data["spaces"][0]["folders"] == ["/Users/x/proj1", "/Users/x/proj2"]
         assert r.data["project_cache"][0]["uuid"] == "PROJ-UUID"
+
+
+async def test_list_local_workspace_model_signals(workspace_fixture):
+    async with Client(srv.mcp) as client:
+        r = await client.call_tool("list_local_workspace", {})
+        by_id = {s["id"]: s for s in r.data["local_sessions"]}
+
+        # No nested transcript for local_sess1 -- default_model/effort from
+        # its local_<uuid>.json metadata is the only signal available.
+        assert by_id["local_sess1"]["default_model"] == "claude-sonnet-5"
+        assert by_id["local_sess1"]["effort"] == "high"
+        assert "models_used" not in by_id["local_sess1"]
+
+        # local_sess2 has a nested transcript -- per-message models_used
+        # should be joined in, showing the model switched mid-session.
+        assert by_id["local_sess2"]["models_used"] == {
+            "claude-sonnet-5": 1, "claude-haiku-4-5-20251001": 1,
+        }
+        assert by_id["local_sess2"]["transcript_event_count"] == 2
+
+
+def test_read_cowork_session_transcripts(tmp_path):
+    desktop_root = tmp_path / "Claude"
+    transcript = (
+        desktop_root / "local-agent-mode-sessions" / "ACCOUNT" / "ORG"
+        / "local_abc" / ".claude" / "projects" / "proj" / "sess.jsonl"
+    )
+    transcript.parent.mkdir(parents=True)
+    with transcript.open("w", encoding="utf-8") as f:
+        f.write(json.dumps(
+            {"type": "assistant", "message": {"model": "claude-opus-5", "role": "assistant"}}
+        ) + "\n")
+        f.write(json.dumps(
+            {"type": "assistant", "message": {"model": "claude-opus-5", "role": "assistant"}}
+        ) + "\n")
+
+    result = local_data.read_cowork_session_transcripts(desktop_root)
+    assert result == {
+        "local_abc": {"models_used": {"claude-opus-5": 2}, "transcript_event_count": 2}
+    }
+
+
+class TestMessageModel:
+    def test_finds_model_key(self):
+        assert export_data._message_model({"model": "claude-x"}) == "claude-x"
+
+    def test_finds_model_slug_key(self):
+        assert export_data._message_model({"model_slug": "claude-y"}) == "claude-y"
+
+    def test_missing_returns_none(self):
+        assert export_data._message_model({"text": "hi"}) is None
 
 
 # --------------------------------------------------------------------------------
@@ -279,6 +387,47 @@ async def test_parse_export_writes_expected_files(tmp_path, export_fixture):
         memory_md = (out_dir / "memory_context.md").read_text()
         assert "Global narrative about the user." in memory_md
         assert "Japan Trip" in memory_md
+
+
+async def test_parse_export_notes_missing_model_field(tmp_path, export_fixture):
+    out_dir = tmp_path / "out_no_model"
+    async with Client(srv.mcp) as client:
+        r = await client.call_tool(
+            "parse_export", {"export_dir": str(export_fixture), "out_dir": str(out_dir)}
+        )
+        notes = r.data["stats"]["notes"]
+        assert any("doesn't record which model generated a response" in n for n in notes)
+        conversations = [
+            json.loads(line)
+            for line in (out_dir / "conversations.jsonl").read_text().splitlines()
+        ]
+        assert all(c["models_used"] == {} for c in conversations)
+
+
+async def test_parse_export_captures_model_usage(tmp_path):
+    export_dir = tmp_path / "export_with_model"
+    _write_json(export_dir / "conversations.json", [
+        {
+            "uuid": "c1", "name": "With model", "created_at": "2026-01-01T00:00:00Z",
+            "chat_messages": [
+                {"sender": "human", "text": "Summarize this."},
+                {"sender": "assistant", "text": "Sure.", "model": "claude-sonnet-5"},
+                {"sender": "assistant", "text": "Anything else?", "model": "claude-sonnet-5"},
+            ],
+        },
+    ])
+    out_dir = tmp_path / "out_with_model"
+    async with Client(srv.mcp) as client:
+        r = await client.call_tool(
+            "parse_export", {"export_dir": str(export_dir), "out_dir": str(out_dir)}
+        )
+        notes = r.data["stats"]["notes"]
+        assert not any("doesn't record which model" in n for n in notes)
+        conversations = [
+            json.loads(line)
+            for line in (out_dir / "conversations.jsonl").read_text().splitlines()
+        ]
+        assert conversations[0]["models_used"] == {"claude-sonnet-5": 2}
 
 
 async def test_parse_export_missing_conversations_json_notes_zero(tmp_path):
@@ -459,6 +608,78 @@ async def test_render_dashboard_writes_html_and_history(tmp_path, monkeypatch):
         history_path = tmp_path / "state" / "history.jsonl"
         lines = history_path.read_text().splitlines()
         assert len(lines) == 2
+
+
+async def test_render_dashboard_model_usage_and_findings(tmp_path, monkeypatch):
+    monkeypatch.setenv(
+        "SHADETREE_AI_PLUGINS_CLAUDE_USAGE_ANALYZER_STATE_DIR", str(tmp_path / "state2")
+    )
+    out_path = tmp_path / "dashboard2.html"
+    plan = {
+        "title": "Claude Usage Analysis",
+        "stat_tiles": [{"label": "Chats analyzed", "value": "10"}],
+        "model_usage": [
+            {"model": "claude-opus-5", "count": 3},
+            {"model": "claude-haiku-4-5", "count": 27},
+        ],
+        "findings": [
+            {
+                "title": "Frontier model used for simple lookups",
+                "severity": "warning",
+                "evidence": ["Capital of France?", "Convert 5 miles to km"],
+                "recommendation": "Route short factual asks to a lighter model.",
+            }
+        ],
+    }
+
+    async with Client(srv.mcp) as client:
+        await client.call_tool("render_dashboard", {"plan": plan, "out_path": str(out_path)})
+        html = out_path.read_text()
+        assert "Model usage" in html
+        assert "claude-opus-5" in html
+        assert "claude-haiku-4-5" in html
+        assert "Usage &amp; best-practices findings" in html
+        assert "Frontier model used for simple lookups" in html
+        assert "Route short factual asks to a lighter model." in html
+        assert "Convert 5 miles to km" in html
+
+
+async def test_render_dashboard_recommendations(tmp_path, monkeypatch):
+    monkeypatch.setenv(
+        "SHADETREE_AI_PLUGINS_CLAUDE_USAGE_ANALYZER_STATE_DIR", str(tmp_path / "state3")
+    )
+    out_path = tmp_path / "dashboard3.html"
+    plan = {
+        "title": "Claude Usage Analysis",
+        "recommendations": [
+            {
+                "title": "Connect the Gmail connector",
+                "kind": "existing",
+                "item_type": "connector",
+                "source": "claude.ai connectors",
+                "evidence": ["Weekly status email", "Client follow-up"],
+                "rationale": "Both chats had the user paste email text by hand.",
+            },
+            {
+                "title": "Build a custom invoice-reconciliation skill",
+                "kind": "custom",
+                "item_type": "skill",
+                "evidence": ["Invoice check Jan", "Invoice check Feb", "Invoice check Mar"],
+                "rationale": "No existing skill/plugin covers this internal workflow.",
+            },
+        ],
+    }
+
+    async with Client(srv.mcp) as client:
+        await client.call_tool("render_dashboard", {"plan": plan, "out_path": str(out_path)})
+        html = out_path.read_text()
+        assert "Recommended skills, plugins &amp; connectors" in html
+        assert "Already available" in html
+        assert "Worth building custom" in html
+        assert "Connect the Gmail connector" in html
+        assert "Build a custom invoice-reconciliation skill" in html
+        assert "claude.ai connectors" in html
+        assert "Weekly status email" in html
 
 
 # --------------------------------------------------------------------------------

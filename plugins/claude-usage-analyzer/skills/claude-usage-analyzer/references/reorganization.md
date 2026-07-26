@@ -39,13 +39,15 @@ empty.
   the dashboard's stat tiles and project tags use.
 
 If a recurring *workflow* pattern turns up (the same multi-step process
-being manually re-explained chat after chat), that's automation-mining
-territory, not this lens -- note it in one line and move on; this version
-doesn't build that report (see the main skill file's non-goals).
+being manually re-explained chat after chat), that's the usage &
+best-practices lens's territory, not this one -- note it in one line here
+and let [usage-efficiency.md](usage-efficiency.md)'s automation-candidate
+flag (Step 5) pick it up with evidence; don't build a full automation
+recommendation out in this lens (see the main skill file's non-goals).
 
 Keep the reasoning visible to the user in summary form before jumping
 straight to the polished dashboard -- a one-paragraph "here's what I found
-and why" before Step 5 gives them a checkpoint.
+and why" before Step 6 gives them a checkpoint.
 
 ## The plan (what feeds `render_dashboard`)
 
@@ -67,4 +69,5 @@ Build a `plan` dict per `render_dashboard`'s documented shape:
 4. **`notes`** -- data-quality caveats carried over from Step 1-3 (thin
    export, missing project links, local-only vs. combined, etc.).
 
-Then return to the main skill file's Step 5 (render) and Step 6 (review).
+Then continue to the main skill file's Step 5 (usage & best-practices
+lens) before Step 6 (render) and Step 7 (review).

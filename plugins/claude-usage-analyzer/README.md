@@ -2,12 +2,16 @@
 
 Read-only analysis of how you actually use Claude: local Claude Desktop/
 Cowork/CLI data on this machine, plus an optional claude.ai account data
-export, turned into a live, self-updating HTML dashboard proposing a
-workspace reorganization -- which chats belong in which Projects, each
-Project's name/description/custom instructions, what file/folder structure
-it needs, and what's stale vs. active. It never moves, renames, or deletes
-a chat or Project itself -- it only reads and proposes; acting on the plan
-is always a separate, explicit step the user drives.
+export, turned into a live, self-updating HTML dashboard covering two
+lenses -- a workspace reorganization proposal (which chats belong in which
+Projects, each Project's name/description/custom instructions, what
+file/folder structure it needs, and what's stale vs. active) and a usage &
+best-practices review (project/chat counts, a model-usage breakdown,
+chats that used a more expensive/complex model than the task needed,
+prompting/context patterns, and recommended public skills/plugins/
+connectors vs. custom ones worth building). It never moves, renames, or
+deletes a chat or Project itself -- it only reads and proposes; acting on
+the plan is always a separate, explicit step the user drives.
 
 This plugin is primarily its skill
 (`skills/claude-usage-analyzer/SKILL.md`) -- the actual clustering/analysis
@@ -51,28 +55,44 @@ Claude projects" to start once installed.
   check that warns (with the folder-scope explanation above) if no known
   Claude data location is visible to this session at all.
 - `skills/claude-usage-analyzer/SKILL.md` -- the full workflow: check
-  access, decide what data to use (local/export/both), gather it, analyze,
-  render the dashboard, present for review.
+  access, decide what data to use (local/export/both), gather it, analyze
+  both lenses (reorganization, then usage & best-practices), render the
+  dashboard, present for review.
 - `skills/claude-usage-analyzer/references/data-sources.md` -- exactly
   where every local path comes from, per platform, and how local data and
   an account export combine/overlap.
 - `skills/claude-usage-analyzer/references/export-acquisition.md` --
   requesting an account export via an already-available browser-automation
   tool (opt-in, asked every time; this plugin bundles no browser of its
-  own), plus an optional scheduled-recheck flow that completes the
-  download automatically once it's ready, if a scheduling capability is
-  also available.
+  own), then closing the loop once claude.ai emails the download link:
+  checking whether an already-connected mailbox (Gmail, Outlook/Microsoft
+  365, etc.) is the same account and, if so, offering to search for and
+  act on the export-ready message automatically (opt-in, with an optional
+  scheduled recheck); otherwise pausing to ask the user for the download
+  link or the unzipped folder path directly.
 - `skills/claude-usage-analyzer/references/reorganization.md` -- the
-  analysis method and the exact `plan` shape that feeds the dashboard.
+  reorganization-lens analysis method and the `projects`/`leftovers` part
+  of the `plan` shape that feeds the dashboard.
+- `skills/claude-usage-analyzer/references/usage-efficiency.md` -- the
+  usage & best-practices lens: right-sizing model choice per task from
+  each session/conversation's model-usage signal, context/prompting
+  patterns worth flagging, evidence-based automation candidates, and
+  recommending an existing public skill/plugin/connector vs. a custom one
+  worth building; the `model_usage`/`findings`/`recommendations` part of
+  the `plan` shape.
 - `skills/claude-usage-analyzer/references/dashboard.md` -- rendering,
   the Artifact-publish-if-available fallback logic, and re-running over
   time.
 - `src/shadetree_ai_plugins_claude_usage_analyzer/local_data.py` --
   cross-platform, read-only probing/parsing of local Desktop/Cowork/CLI
-  data, redacted throughout.
+  data, redacted throughout. Includes a per-message `models_used` tally
+  for CLI sessions and, via Cowork's own nested per-session transcript, for
+  Cowork/Chat sessions too, plus a `default_model`/`effort` fallback from
+  Desktop session metadata.
 - `src/shadetree_ai_plugins_claude_usage_analyzer/export_data.py` --
   parses a claude.ai account export into paged files instead of one huge
-  in-context blob.
+  in-context blob, including a per-conversation `models_used` tally where
+  the export schema carries one.
 - `src/shadetree_ai_plugins_claude_usage_analyzer/dashboard.py` -- renders
   the HTML dashboard and keeps a local history log across runs.
 - `src/shadetree_ai_plugins_common` -- symlink to the repo's shared helpers
@@ -86,10 +106,10 @@ Claude projects" to start once installed.
 | Tool | Purpose |
 |---|---|
 | `usage_doctor` | Preflight: which local data locations are visible to this session, per-platform. Call first. |
-| `list_local_workspace` | Redacted inventory of local Desktop/Cowork/CLI usage, plus reconstructed chat->Project/Space membership. |
+| `list_local_workspace` | Redacted inventory of local Desktop/Cowork/CLI usage, including a per-session `models_used` tally (CLI sessions, and Cowork/Chat sessions via their nested transcript) plus a `default_model`/`effort` fallback, and reconstructed chat->Project/Space membership. |
 | `locate_export_download` | Find an already-downloaded claude.ai export zip (matched by content, not filename) and unpack it -- used by the scheduled-recheck flow. |
-| `parse_export` | Parse a claude.ai account data export into compact paged files. |
-| `render_dashboard` | Render an already-reasoned-about reorganization plan into a self-contained, re-renderable HTML dashboard with a progress-over-time history log. |
+| `parse_export` | Parse a claude.ai account data export into compact paged files. Never carries model-usage data -- confirmed absent from this export format. |
+| `render_dashboard` | Render an already-reasoned-about reorganization + usage/best-practices plan (including skill/plugin/connector recommendations) into a self-contained, re-renderable HTML dashboard with a progress-over-time history log. |
 
 See `skills/claude-usage-analyzer/SKILL.md` for the full usage guidance and
 each reference doc above for the details behind each step.
@@ -99,6 +119,8 @@ each reference doc above for the details behind each step.
 - **Executing** the plan -- actually creating/renaming Projects or moving
   chats in the claude.ai UI. Hand the reviewed plan over as a checklist for
   now.
-- **Automation mining** -- recommending which recurring workflows should
-  become a Skill or a scheduled task. A different lens on the same kind of
-  data; this version is analysis + dashboard only.
+- **Full automation mining** -- a dedicated program that exhaustively
+  clusters recurring workflows across the account and designs the
+  automation. The usage & best-practices lens flags automation
+  *candidates* it notices along the way, with evidence, but doesn't go
+  looking for them exhaustively or build the automation out itself.

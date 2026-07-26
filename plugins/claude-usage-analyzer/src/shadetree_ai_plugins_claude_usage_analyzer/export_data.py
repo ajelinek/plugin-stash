@@ -65,6 +65,26 @@ def _tool_names(message: dict[str, Any]) -> set[str]:
     return names
 
 
+_MESSAGE_MODEL_KEYS = ("model", "model_slug", "model_id")
+
+
+def _message_model(message: dict[str, Any]) -> str | None:
+    """Try a few plausible key names -- never assume one is present. In
+    practice this has come back empty on every export checked directly (a
+    full per-message and per-conversation key scan, plus a raw-text regex
+    for any key containing "model" across the whole file, found zero hits):
+    the web export format doesn't appear to record which model generated a
+    response at all. Kept defensive anyway since export schemas vary by
+    account/vintage and aren't a documented public API -- if a future
+    export does carry one of these keys, it starts working without a code
+    change."""
+    for key in _MESSAGE_MODEL_KEYS:
+        value = message.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
 def _keywords(text: str, limit: int = 8) -> list[str]:
     tokens = re.findall(r"[a-zA-Z][a-zA-Z0-9_-]{2,}", text.lower())
     counts = Counter(t for t in tokens if t not in _STOPWORDS)
@@ -90,8 +110,12 @@ def summarize_conversation(convo: dict[str, Any]) -> dict[str, Any]:
     first_human_text = _message_text(human_messages[0]) if human_messages else ""
 
     tool_names: set[str] = set()
+    model_counts: Counter[str] = Counter()
     for m in messages:
         tool_names |= _tool_names(m)
+        model = _message_model(m)
+        if model:
+            model_counts[model] += 1
 
     keyword_source = f"{convo.get('name') or ''} {first_human_text}"
 
@@ -105,6 +129,7 @@ def summarize_conversation(convo: dict[str, Any]) -> dict[str, Any]:
         "first_human_message": first_human_text[:FIRST_MESSAGE_PREVIEW_CHARS],
         "tool_names": sorted(tool_names),
         "keywords": _keywords(keyword_source),
+        "models_used": dict(model_counts.most_common()),
     }
 
 
@@ -256,6 +281,18 @@ def parse_export(export_dir: str, out_dir: str) -> dict[str, Any]:
             "this export schema doesn't carry a per-conversation project link. Reconstruct "
             "membership from memory_context.md's per-project sections and "
             "name/keyword similarity instead of treating these chats as unaffiliated."
+        )
+
+    conversations_with_messages = sum(1 for c in conversations if c.get("message_count"))
+    conversations_with_models = sum(1 for c in conversations if c.get("models_used"))
+    if conversations_with_messages and conversations_with_models == 0:
+        notes.append(
+            "No conversation in this export carries a per-message model field -- consistent "
+            "with every export checked directly so far, the claude.ai web export format "
+            "doesn't record which model generated a response at all. Model-usage analysis "
+            "isn't available from export data; it's not just this run's export being unusual. "
+            "list_local_workspace's CLI sessions and Cowork/Chat local sessions are the "
+            "actual source for that signal (see references/data-sources.md)."
         )
 
     stats = {
