@@ -1,0 +1,149 @@
+---
+name: claude-usage-analyzer
+description: >
+  Analyzes how the user actually uses Claude -- local Claude Desktop/Cowork/
+  CLI data on this machine, plus an optional claude.ai account data export --
+  and produces a live, self-updating HTML dashboard proposing how to
+  reorganize their workspace: which chats belong in which Projects, each
+  Project's name/description/custom instructions, what file/folder structure
+  it needs, and what's stale vs. active. Uses this plugin's bundled
+  usage_doctor / list_local_workspace / parse_export / render_dashboard MCP
+  tools. Trigger on "analyze my Claude usage/chats/projects", "organize my
+  Claude workspace", "audit my Claude usage", "reorganize my chats", "find
+  patterns in my conversations", "how am I using Claude", or when handed a
+  claude.ai data export folder. Analysis and dashboard generation only --
+  it never moves, renames, or deletes a chat or Project itself.
+---
+
+# Claude Usage Analyzer
+
+## What this is
+
+A read-only analysis of the user's own Claude usage, combining up to two
+sources of data, ending in a single reviewable deliverable: a **live HTML
+dashboard** proposing a workspace reorganization (Projects to create, which
+existing chats move into each, each Project's name/description/custom
+instructions, and what file/folder structure it needs).
+
+This version does analysis and dashboard generation **only**. It
+deliberately does not (yet):
+
+- **Execute** the plan -- actually creating/renaming Projects or moving
+  chats in the claude.ai UI. That needs its own browser-driven build and is
+  future work; for now, hand the reviewed plan over as a checklist.
+- **Automation mining** -- recommending which recurring workflows should
+  become a Skill or a scheduled task. A different lens on the same kind of
+  data, also future work; don't build it ad hoc here.
+
+Say so plainly if the user asks for either -- don't half-build them.
+
+## Step 1: Check data access
+
+Call `usage_doctor` first, every session. It reports which local data
+locations (Claude Code CLI's `~/.claude`, Claude Desktop's app-data
+directory, the user-visible `~/Claude` output folder) are visible right now,
+per-platform.
+
+**If `usage_doctor` finds nothing:** this is not proof the user has no
+Claude history. Read `references/data-sources.md` before saying anything
+further -- the short version:
+
+- Running via the **Claude Code CLI** in a terminal/IDE already has ordinary
+  filesystem access from its working directory; a doctor failure here is a
+  genuine "not installed/not used on this machine" signal.
+- Running as an **installed Desktop/Cowork plugin**, this MCP server only
+  sees what the current session can see. If the session is inside a
+  folder-scoped Cowork Space or Project, those folders have to be added to
+  that Space/Project's file access scope explicitly -- the plugin has no
+  broader access on its own. Tell the user exactly which folder(s)
+  `usage_doctor`'s `desktop_candidates`/`cli` fields list for their platform,
+  and that they need to add them via the Space/Project's file/folder
+  settings, then restart the session.
+
+Don't proceed to a full analysis on a guessed-at inventory -- get real
+access (or an explicit "local data isn't available, export-only" decision)
+first.
+
+## Step 2: Decide what data to use
+
+Two independent sources, not mutually exclusive:
+
+1. **Local data** (`list_local_workspace`) -- whatever `usage_doctor` found
+   readable. Always available if Step 1 succeeded; no user action needed
+   beyond the folder-scope fix above.
+2. **A claude.ai account export** (`conversations.json` etc.) -- covers
+   claude.ai web chats, which local data never sees at all (see
+   references/data-sources.md section 4 for exactly how the two overlap and
+   where each undercounts). Ask the user:
+   - If they already have an unzipped export folder, get its path and skip
+     to Step 3.
+   - Otherwise, offer to try requesting it via browser automation -- see
+     references/export-acquisition.md. This is opt-in and asked explicitly
+     every time (no carried-over approval from an earlier session), and it
+     only *requests* the export; the actual zip arrives by email on
+     claude.ai's own schedule, not instantly. If no browser-automation tool
+     is available, or the user declines, either proceed local-data-only or
+     have them request/download it by hand and hand you the path once
+     unzipped.
+
+Say plainly which source(s) ended up in play before presenting any analysis
+-- local-only, export-only, or both -- since that changes how complete the
+picture is.
+
+## Step 3: Gather the data
+
+- Call `list_local_workspace` if local data is in play.
+- Call `parse_export(export_dir)` if an export is in play. Check the
+  returned `stats.notes` first: a thin corpus (under 10 conversations) or a
+  missing per-conversation project link changes how much confidence to put
+  in the analysis, and both need to be said plainly before presenting
+  output, not silently absorbed.
+
+## Step 4: Analyze (reorganization lens)
+
+See [references/reorganization.md](references/reorganization.md) for the
+full method: reconstructing chat -> Project/Space membership when the
+direct link is missing or partial, spotting topic clusters, and separating
+stale one-offs from active work worth structuring.
+
+For each proposed Project, work out all of: **name**, **description**,
+**custom instructions** (the Project-level prompt/instructions text), which
+**existing chats** move into it, and what **file/folder structure**
+(reference docs, knowledge files) it needs and why. This is the actual
+analytical work -- deciding "these conversations are one real project"
+takes understanding the content, not just clustering keywords; the tools
+above hand you structured data, not conclusions.
+
+## Step 5: Render the dashboard
+
+Build the `plan` dict per `render_dashboard`'s documented shape and call it.
+See [references/dashboard.md](references/dashboard.md) for the exact
+fields, the Artifact-publish-if-available fallback logic, and how the
+history log makes re-runs show progress over time.
+
+## Step 6: Present and get explicit review
+
+Stop after rendering. Point the user at the dashboard (its path, and the
+live Artifact link if one was published) and ask them to confirm, edit, or
+reject pieces of the plan. Don't treat "I rendered it" as the same as "they
+reviewed it" -- nothing past this point happens until they've reacted, and
+there is no Step past this point yet regardless (see "What this is" above).
+
+## Handling sensitive content
+
+Local session data and an account export both contain the user's actual
+conversation history -- business details, personal context, third-party
+information. Analyze it in this session to produce the dashboard; don't
+restate large verbatim chunks in the dashboard or in chat beyond what's
+needed as evidence (a chat name, date, and one-line excerpt is enough).
+`list_local_workspace` already redacts secret-shaped keys and heavy tool
+schemas before you ever see them -- don't work around that by reading the
+underlying files directly.
+
+## Non-goals
+
+- Not a bulk-mover or bulk-deleter -- this skill only ever proposes; Step 6
+  is where it stops.
+- Not a substitute for the user's own judgment on naming/scope -- the
+  dashboard is a strong starting proposal, not a final answer.
+- Not automation mining, and not plan execution -- see "What this is."
