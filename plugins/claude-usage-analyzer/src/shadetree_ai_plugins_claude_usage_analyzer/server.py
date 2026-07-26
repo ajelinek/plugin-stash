@@ -1,13 +1,16 @@
 """FastMCP server bundled with the shadetree-ai-plugins 'claude-usage-analyzer'
 plugin.
 
-Four tools, each thin over one of this package's modules:
+Five tools, each thin over one of this package's modules:
 
 - `usage_doctor` -- read-only access check across CLI/Desktop/output data
   locations (see local_data.py). Call this first in a session.
 - `list_local_workspace` -- redacted inventory of local Desktop/Cowork/CLI
   usage: Spaces, cached cloud Projects, Chat/Cowork sessions, CLI sessions,
   and the reconstructed chat->Project membership.
+- `locate_export_download` -- find an already-downloaded claude.ai export
+  zip (verified by content, not filename) and unpack it, for the
+  scheduled-recheck flow in references/export-acquisition.md.
 - `parse_export` -- parse a claude.ai account data export
   (conversations.json etc.) into compact paged files instead of a single
   huge in-context blob.
@@ -91,6 +94,34 @@ def list_local_workspace() -> dict:
     this ever returns. This is a cache, not authoritative -- say so before
     presenting counts as exact."""
     return local_data.build_inventory()
+
+
+@mcp.tool(annotations=_WRITE_LOCAL)
+def locate_export_download(
+    search_dirs: list[str] | None = None, out_dir_base: str | None = None
+) -> dict:
+    """Look for an already-downloaded claude.ai export zip and unpack it --
+    used by the scheduled-recheck flow in
+    references/export-acquisition.md after a browser tool has (re)visited
+    the export settings page and triggered a download. Matches by content
+    (a `conversations.json` member inside the zip), never by filename --
+    that naming isn't a documented convention. Defaults `search_dirs` to
+    this OS's Downloads folder; unpacks into its own subdirectory (named
+    after the zip) under out_dir_base, defaulting to a plugin state
+    subdirectory.
+
+    Returns one of:
+    - `{"found": false}` -- no candidate yet; not an error, the download
+      may simply not have landed. The caller should try again later
+      rather than treat this as failure.
+    - `{"found": true, "ambiguous": true, "candidates": [...]}` -- more
+      than one zip looks like an export; ask the user which one rather
+      than guessing.
+    - `{"found": true, "ambiguous": false, "export_dir": ..., "zip_path":
+      ...}` -- unpacked and ready to hand straight to `parse_export`."""
+    resolved_search_dirs = search_dirs or [str(Path.home() / "Downloads")]
+    resolved_out_dir_base = out_dir_base or str(Path(_default_state_dir()) / "export-downloads")
+    return export_data.locate_export_download(resolved_search_dirs, resolved_out_dir_base)
 
 
 @mcp.tool(annotations=_WRITE_LOCAL)

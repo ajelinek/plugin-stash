@@ -7,11 +7,12 @@ from __future__ import annotations
 
 import json
 import re
+import zipfile
 from pathlib import Path
 
 import pytest
 from fastmcp import Client
-from shadetree_ai_plugins_claude_usage_analyzer import local_data
+from shadetree_ai_plugins_claude_usage_analyzer import export_data, local_data
 from shadetree_ai_plugins_claude_usage_analyzer import server as srv
 
 
@@ -290,6 +291,116 @@ async def test_parse_export_missing_conversations_json_notes_zero(tmp_path):
         )
         assert r.data["stats"]["conversation_count"] == 0
         assert any("missing or not a json array" in n.lower() for n in r.data["stats"]["notes"])
+
+
+# --------------------------------------------------------------------------------
+# locate_export_download
+# --------------------------------------------------------------------------------
+
+
+def _write_zip(path: Path, members: dict[str, str]) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(path, "w") as zf:
+        for name, content in members.items():
+            zf.writestr(name, content)
+    return path
+
+
+class TestFindExportZipCandidates:
+    def test_finds_zip_with_top_level_conversations_json(self, tmp_path):
+        _write_zip(tmp_path / "export1.zip", {"conversations.json": "[]", "users.json": "{}"})
+        candidates = export_data.find_export_zip_candidates([tmp_path])
+        assert len(candidates) == 1
+        assert candidates[0]["zip_path"] == str(tmp_path / "export1.zip")
+
+    def test_finds_zip_with_nested_conversations_json(self, tmp_path):
+        _write_zip(tmp_path / "export2.zip", {"export-data/conversations.json": "[]"})
+        candidates = export_data.find_export_zip_candidates([tmp_path])
+        assert len(candidates) == 1
+
+    def test_ignores_zip_without_conversations_json(self, tmp_path):
+        _write_zip(tmp_path / "not-an-export.zip", {"readme.txt": "hello"})
+        candidates = export_data.find_export_zip_candidates([tmp_path])
+        assert candidates == []
+
+    def test_ignores_corrupt_zip(self, tmp_path):
+        (tmp_path / "corrupt.zip").write_bytes(b"not actually a zip")
+        candidates = export_data.find_export_zip_candidates([tmp_path])
+        assert candidates == []
+
+    def test_missing_directory_returns_empty(self, tmp_path):
+        assert export_data.find_export_zip_candidates([tmp_path / "nope"]) == []
+
+    def test_newest_first(self, tmp_path):
+        import os
+
+        older = _write_zip(tmp_path / "older.zip", {"conversations.json": "[]"})
+        newer = _write_zip(tmp_path / "newer.zip", {"conversations.json": "[]"})
+        os.utime(older, (1_000_000_000, 1_000_000_000))
+        os.utime(newer, (2_000_000_000, 2_000_000_000))
+        candidates = export_data.find_export_zip_candidates([tmp_path])
+        assert len(candidates) == 2
+        assert candidates[0]["zip_path"] == str(newer)
+
+
+class TestUnpackExportZip:
+    def test_top_level_conversations_json(self, tmp_path):
+        zip_path = _write_zip(tmp_path / "export.zip", {"conversations.json": "[]"})
+        export_dir = export_data.unpack_export_zip(str(zip_path), str(tmp_path / "out"))
+        assert (Path(export_dir) / "conversations.json").is_file()
+
+    def test_nested_conversations_json_returns_inner_dir(self, tmp_path):
+        zip_path = _write_zip(
+            tmp_path / "export.zip", {"wrapper-folder/conversations.json": "[]"}
+        )
+        export_dir = export_data.unpack_export_zip(str(zip_path), str(tmp_path / "out"))
+        assert Path(export_dir).name == "wrapper-folder"
+        assert (Path(export_dir) / "conversations.json").is_file()
+
+
+class TestLocateExportDownload:
+    def test_not_found_yet(self, tmp_path):
+        result = export_data.locate_export_download([str(tmp_path)], str(tmp_path / "out"))
+        assert result == {"found": False, "candidates": []}
+
+    def test_single_candidate_unpacks(self, tmp_path):
+        _write_zip(tmp_path / "my-export.zip", {"conversations.json": "[]"})
+        result = export_data.locate_export_download([str(tmp_path)], str(tmp_path / "out"))
+        assert result["found"] is True
+        assert result["ambiguous"] is False
+        assert (Path(result["export_dir"]) / "conversations.json").is_file()
+
+    def test_multiple_candidates_are_ambiguous(self, tmp_path):
+        _write_zip(tmp_path / "export-a.zip", {"conversations.json": "[]"})
+        _write_zip(tmp_path / "export-b.zip", {"conversations.json": "[]"})
+        result = export_data.locate_export_download([str(tmp_path)], str(tmp_path / "out"))
+        assert result["found"] is True
+        assert result["ambiguous"] is True
+        assert result["export_dir"] is None
+        assert len(result["candidates"]) == 2
+
+    def test_repeat_calls_against_same_zip_are_idempotent(self, tmp_path):
+        _write_zip(tmp_path / "my-export.zip", {"conversations.json": "[]"})
+        first = export_data.locate_export_download([str(tmp_path)], str(tmp_path / "out"))
+        second = export_data.locate_export_download([str(tmp_path)], str(tmp_path / "out"))
+        assert first["export_dir"] == second["export_dir"]
+
+
+async def test_locate_export_download_tool_defaults_and_explicit_dirs(tmp_path, monkeypatch):
+    monkeypatch.setenv(
+        "SHADETREE_AI_PLUGINS_CLAUDE_USAGE_ANALYZER_STATE_DIR", str(tmp_path / "state")
+    )
+    downloads_dir = tmp_path / "Downloads"
+    _write_zip(downloads_dir / "my-export.zip", {"conversations.json": "[]"})
+
+    async with Client(srv.mcp) as client:
+        r = await client.call_tool("locate_export_download", {"search_dirs": [str(downloads_dir)]})
+        assert r.data["found"] is True
+        assert r.data["ambiguous"] is False
+        export_dir = Path(r.data["export_dir"])
+        assert (export_dir / "conversations.json").is_file()
+        # defaulted out_dir_base should land under the overridden state dir, not real $HOME
+        assert str(tmp_path / "state") in str(export_dir)
 
 
 # --------------------------------------------------------------------------------

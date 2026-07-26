@@ -79,12 +79,15 @@ Two independent sources, not mutually exclusive:
      to Step 3.
    - Otherwise, offer to try requesting it via browser automation -- see
      references/export-acquisition.md. This is opt-in and asked explicitly
-     every time (no carried-over approval from an earlier session), and it
-     only *requests* the export; the actual zip arrives by email on
-     claude.ai's own schedule, not instantly. If no browser-automation tool
-     is available, or the user declines, either proceed local-data-only or
-     have them request/download it by hand and hand you the path once
-     unzipped.
+     every time (no carried-over approval from an earlier session). The
+     zip arrives on claude.ai's own schedule, not instantly, but if a
+     scheduling capability is also available, the same reference doc
+     covers offering one automatic recheck that completes the download
+     itself once it's ready (via `locate_export_download`), instead of
+     just waiting on the user to notice the email. If no browser-automation
+     tool is available, or the user declines either piece, either proceed
+     local-data-only or have them request/download it by hand and hand you
+     the path once unzipped.
 
 Say plainly which source(s) ended up in play before presenting any analysis
 -- local-only, export-only, or both -- since that changes how complete the

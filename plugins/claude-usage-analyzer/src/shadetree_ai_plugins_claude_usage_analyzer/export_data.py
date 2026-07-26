@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import re
+import zipfile
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -284,4 +285,78 @@ def parse_export(export_dir: str, out_dir: str) -> dict[str, Any]:
             "memory_context": str(memory_context_path),
             "stats": str(stats_path),
         },
+    }
+
+
+# --------------------------------------------------------------------------------
+# Locating a browser-downloaded export zip -- see references/export-acquisition.md.
+# A claude.ai export's zip filename isn't a documented convention, so this never
+# guesses from the name: it opens each zip's member list (without extracting) and
+# only treats it as a candidate if a `conversations.json` actually shows up inside,
+# at the top level or nested one folder deep.
+# --------------------------------------------------------------------------------
+
+
+def find_export_zip_candidates(search_dirs: list[Path]) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for directory in search_dirs:
+        if not directory.is_dir():
+            continue
+        for zip_path in directory.glob("*.zip"):
+            try:
+                with zipfile.ZipFile(zip_path) as zf:
+                    names = zf.namelist()
+            except (zipfile.BadZipFile, OSError):
+                continue
+            if any(n.endswith("conversations.json") for n in names):
+                candidates.append(
+                    {
+                        "zip_path": str(zip_path),
+                        "modified": zip_path.stat().st_mtime,
+                        "member_count": len(names),
+                    }
+                )
+    candidates.sort(key=lambda c: c["modified"], reverse=True)
+    return candidates
+
+
+def unpack_export_zip(zip_path: str, out_dir: str) -> str:
+    """Extract `zip_path` into out_dir and return the directory that actually
+    holds conversations.json -- some exports wrap everything in one folder
+    inside the zip, some don't."""
+    out_path = Path(out_dir).expanduser()
+    out_path.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(zip_path) as zf:
+        zf.extractall(out_path)
+
+    if (out_path / "conversations.json").is_file():
+        return str(out_path)
+    match = next(out_path.rglob("conversations.json"), None)
+    return str(match.parent) if match else str(out_path)
+
+
+def locate_export_download(search_dirs: list[str], out_dir_base: str) -> dict[str, Any]:
+    """Look for an already-downloaded export zip in `search_dirs` and unpack
+    the newest match into its own subdirectory (named after the zip, so
+    repeat calls against the same download are idempotent and different
+    downloads never collide) under out_dir_base. Returns `found: False` if
+    none match yet (not an error -- the download may simply not have
+    landed yet), or `ambiguous: True` with every candidate if more than one
+    zip looks like an export, so the caller can ask rather than guess which
+    is current."""
+    candidates = find_export_zip_candidates([Path(d).expanduser() for d in search_dirs])
+    if not candidates:
+        return {"found": False, "candidates": []}
+    if len(candidates) > 1:
+        return {"found": True, "ambiguous": True, "candidates": candidates, "export_dir": None}
+
+    zip_path = Path(candidates[0]["zip_path"])
+    out_dir = str(Path(out_dir_base).expanduser() / zip_path.stem)
+    export_dir = unpack_export_zip(str(zip_path), out_dir)
+    return {
+        "found": True,
+        "ambiguous": False,
+        "candidates": candidates,
+        "zip_path": str(zip_path),
+        "export_dir": export_dir,
     }

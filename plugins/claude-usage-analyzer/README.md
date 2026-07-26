@@ -59,7 +59,9 @@ Claude projects" to start once installed.
 - `skills/claude-usage-analyzer/references/export-acquisition.md` --
   requesting an account export via an already-available browser-automation
   tool (opt-in, asked every time; this plugin bundles no browser of its
-  own).
+  own), plus an optional scheduled-recheck flow that completes the
+  download automatically once it's ready, if a scheduling capability is
+  also available.
 - `skills/claude-usage-analyzer/references/reorganization.md` -- the
   analysis method and the exact `plan` shape that feeds the dashboard.
 - `skills/claude-usage-analyzer/references/dashboard.md` -- rendering,
@@ -85,6 +87,7 @@ Claude projects" to start once installed.
 |---|---|
 | `usage_doctor` | Preflight: which local data locations are visible to this session, per-platform. Call first. |
 | `list_local_workspace` | Redacted inventory of local Desktop/Cowork/CLI usage, plus reconstructed chat->Project/Space membership. |
+| `locate_export_download` | Find an already-downloaded claude.ai export zip (matched by content, not filename) and unpack it -- used by the scheduled-recheck flow. |
 | `parse_export` | Parse a claude.ai account data export into compact paged files. |
 | `render_dashboard` | Render an already-reasoned-about reorganization plan into a self-contained, re-renderable HTML dashboard with a progress-over-time history log. |
 

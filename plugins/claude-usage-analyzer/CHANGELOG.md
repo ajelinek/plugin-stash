@@ -4,8 +4,8 @@
 
 Initial release.
 
-- `usage_doctor`, `list_local_workspace`, `parse_export`, `render_dashboard`
-  MCP tools.
+- `usage_doctor`, `list_local_workspace`, `locate_export_download`,
+  `parse_export`, `render_dashboard` MCP tools.
 - Read-only, cross-platform probing of local Claude Desktop/Cowork/CLI data
   (`~/.claude`, Desktop app-data incl. Windows MSIX/3P variants, the
   user-visible `~/Claude` output folder), with redaction of secret-shaped
@@ -16,8 +16,10 @@ Initial release.
 - Self-contained HTML dashboard renderer with a local history log so
   re-running analysis later shows progress over time.
 - `skills/claude-usage-analyzer/SKILL.md` + reference docs covering data
-  sourcing, opt-in browser-assisted export requesting, the reorganization
-  analysis method, and dashboard rendering/publishing.
+  sourcing, opt-in browser-assisted export requesting (with an optional
+  scheduled-recheck flow that completes the download automatically once
+  it's ready, when a scheduling capability is also available), the
+  reorganization analysis method, and dashboard rendering/publishing.
 - SessionStart hooks: shared `uv`-on-PATH check, plus a new
   `check_data_access.py` explaining Desktop Space/Project folder-scope
   requirements when no local data is visible.
