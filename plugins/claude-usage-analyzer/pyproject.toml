@@ -1,0 +1,16 @@
+[project]
+name = "shadetree-ai-plugins-claude-usage-analyzer"
+version = "0.1.0"
+description = "FastMCP server bundled with the shadetree-ai-plugins 'claude-usage-analyzer' plugin: read-only inventory of local Claude Desktop/Cowork/CLI usage plus claude.ai account-export parsing, feeding a self-updating HTML dashboard."
+requires-python = ">=3.12"
+dependencies = [
+    "fastmcp>=3.4",
+    "keyring>=25.5.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.8.17,<0.9"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = ["shadetree_ai_plugins_claude_usage_analyzer", "shadetree_ai_plugins_common"]

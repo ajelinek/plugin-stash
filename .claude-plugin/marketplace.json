@@ -15,6 +15,11 @@
       "name": "career-navigator",
       "source": "./plugins/career-navigator",
       "description": "Conversational career exploration for a high school student: infers a RIASEC (Holland Code) profile through natural conversation, then matches it against a local O*NET occupational dataset. Fully local — no accounts, no hosting, no network calls at runtime."
+    },
+    {
+      "name": "claude-usage-analyzer",
+      "source": "./plugins/claude-usage-analyzer",
+      "description": "Analyzes local Claude Desktop/Cowork/CLI usage plus an optional claude.ai account export, and produces a live, self-updating HTML dashboard proposing a workspace reorganization — which chats belong in which Projects, each Project's name/description/custom instructions, and file structure. Read-only analysis; never moves, renames, or deletes anything on its own."
     }
   ]
 }
