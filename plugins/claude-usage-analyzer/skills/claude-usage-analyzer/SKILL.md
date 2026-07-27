@@ -22,6 +22,11 @@ description: >
 
 # Claude Usage Analyzer
 
+**Skill version: 0.1.1** (matches `.claude-plugin/plugin.json`). Bump this
+line, in lockstep with that file's `version`, any time this skill's
+content changes -- it's the quickest way to confirm an installed copy
+has picked up the latest instructions rather than a stale cached one.
+
 ## What this is
 
 A read-only analysis of the user's own Claude usage, combining up to two

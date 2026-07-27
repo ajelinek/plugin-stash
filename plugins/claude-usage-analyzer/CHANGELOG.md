@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1 -- 2026-07-27
+
+- `SKILL.md` now shows its own version number right under the title,
+  kept in lockstep with `plugin.json`'s `version` -- an easy way to
+  confirm an installed/cached copy actually picked up the latest skill
+  content instead of a stale one.
+
 ## 0.1.0 -- 2026-07-25
 
 Initial release.
