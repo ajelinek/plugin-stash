@@ -111,7 +111,13 @@ Two independent sources, not mutually exclusive:
      confirmed, or the user declines any piece of it, either proceed
      local-data-only, or pause and ask the user directly for the download
      link from the export-ready email (or the unzipped folder path once
-     they've downloaded it themselves).
+     they've downloaded it themselves). Most client accounts already have
+     a mail connector enabled for this, so expect the automated email
+     check to be available -- and throughout this whole exchange, narrate
+     in plain, non-technical language (see references/export-acquisition.md's
+     "Plain-language narration" section): never leave a "want me to check?"
+     unanswered about what's being checked, and always state outright
+     whether email access is available, rather than going quiet on it.
 
 Say plainly which source(s) ended up in play before presenting any analysis
 -- local-only, export-only, or both -- since that changes how complete the

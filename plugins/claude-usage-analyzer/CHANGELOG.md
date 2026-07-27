@@ -67,3 +67,13 @@ Initial release.
   this.
 - Analysis and dashboard generation only -- plan execution and full
   automation mining are deliberately out of scope for this version.
+- The export-acquisition flow now treats an already-connected mail
+  connector (Gmail, Outlook/Microsoft 365, etc.) as the expected case
+  rather than a long-shot, since most client accounts already have one
+  enabled, while still verifying it's the same mailbox as the claude.ai
+  account before using it. Adds an explicit plain-language narration
+  requirement throughout that flow -- since the person on the other end
+  is typically a non-technical business user, every "want me to check?"
+  now states what's being checked in the same breath, and email access
+  (available, unavailable, or mismatched) is always stated outright
+  rather than left implicit.
