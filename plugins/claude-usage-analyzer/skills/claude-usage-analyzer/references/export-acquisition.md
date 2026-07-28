@@ -26,6 +26,28 @@ Nothing here bundles browser-automation code. The skill instead:
    this. A prior approval from an earlier session doesn't carry over --
    ask again each time.
 
+## Plain-language narration, every step
+
+The person on the other end of this skill is typically a non-technical
+business user, not an engineer -- assume that persona unless told
+otherwise. Two rules apply for the rest of this flow, in every step below:
+
+- **Never leave "want me to do this?" hanging without saying what "this"
+  is.** Any time you ask permission to check email or open a link, say in
+  the same breath what you're about to look at and why -- e.g. "I found
+  Gmail connected to your Claude account -- want me to peek at your inbox
+  for the email Claude sends when your download is ready?", not a bare
+  "want me to check?"
+- **State email access plainly, whichever way it goes.** If no connector
+  is available, or it doesn't match the claude.ai account, say so
+  directly ("I don't have a way to check your email from here") instead
+  of staying silent about email and only asking whether to proceed. Don't
+  make the user guess whether checking email is even on the table.
+- Prefer plain words over engineering terms with this audience: "your
+  email inbox" instead of "mailbox", "the download link in that email"
+  instead of "export-ready message", "connected to the same account"
+  instead of "mailbox matched".
+
 ## Before starting (if the user agrees)
 
 - Confirm the user is actually logged into Claude in the browser the tool
@@ -68,9 +90,15 @@ Right after requesting:
 
 1. Search (`ToolSearch` or equivalent) for an email-reading connector
    already available and enabled in this environment -- Gmail,
-   Outlook/Microsoft 365, or any other configured mail integration. If
-   none exists, there's no automated path here: skip straight to "If no
-   automated email check is possible or wanted" below.
+   Outlook/Microsoft 365, or any other configured mail integration.
+   **Expect to find one**: most client setups already have a mail
+   connector enabled on their Claude instance for exactly this kind of
+   task, so treat "connected" as the default case to confirm, not a
+   long-shot to rule out. Still search rather than assuming blindly --
+   if one genuinely doesn't turn up despite that expectation, there's no
+   automated path here: skip straight to "If no automated email check is
+   possible or wanted" below, and say plainly (per the plain-language
+   rule above) that no connected email was found.
 2. If one exists, confirm it's actually the **same** mailbox as the
    claude.ai account before using it for anything -- never assume a
    connected mail tool happens to belong to the right account. Compare
@@ -88,41 +116,48 @@ Right after requesting:
 
 ## If an automated email check is possible
 
-Ask the user explicitly (opt-in, every time -- no carried-over approval):
-something like *"I found [connector] connected to the same email as your
-claude.ai account -- want me to check it for the export-ready message
-instead of you having to watch for it?"* If yes:
+Ask the user explicitly (opt-in, every time -- no carried-over approval),
+in plain words that say exactly what will happen: something like *"I
+found your Gmail connected to Claude, and it's the same email as your
+claude.ai account -- want me to watch your inbox for the download link
+instead of you having to check yourself?"* If yes, say so before you
+start ("Okay, checking your email now...") rather than searching silently.
 
-1. Search that mailbox narrowly: messages from claude.ai/Anthropic (sender
+1. Search that inbox narrowly: messages from claude.ai/Anthropic (sender
    containing `anthropic.com` or `claude.ai`) received after the export was
    requested, about the data export being ready. This is the one message
    this flow needs -- don't run an open-ended inbox search or read
    unrelated mail while you're in there.
-2. **If found:** the message's download link is tied to the user's
-   authenticated claude.ai session, so a plain HTTP fetch won't carry it --
-   open the link with the same browser-automation tool already approved
-   for the request instead, which should trigger the download. Then call
-   `locate_export_download` (defaults to this OS's Downloads folder) to
-   find the newly-downloaded zip and unpack it. It matches by the zip
-   actually containing `conversations.json`, not by filename, and returns
-   `ambiguous: true` with every candidate if more than one zip looks like
-   an export -- ask the user to pick rather than guessing which is
-   current. Once resolved, tell the user it's done and offer to move
-   straight on to Step 3 (`parse_export`) with the returned `export_dir`.
-3. **If not found yet:** search (`ToolSearch` or equivalent) for a
+2. **If found:** tell the user in plain words ("Found it -- your download
+   is ready, opening it now to save your data..."). The message's download
+   link is tied to the user's authenticated claude.ai session, so a plain
+   HTTP fetch won't carry it -- open the link with the same
+   browser-automation tool already approved for the request instead, which
+   should trigger the download. Then call `locate_export_download`
+   (defaults to this OS's Downloads folder) to find the newly-downloaded
+   zip and unpack it into the right folder for analysis. It matches by the
+   zip actually containing `conversations.json`, not by filename, and
+   returns `ambiguous: true` with every candidate if more than one zip
+   looks like an export -- ask the user to pick rather than guessing which
+   is current. Once resolved, tell the user plainly it's downloaded and
+   ready, and offer to move straight on to Step 3 (`parse_export`) with the
+   returned `export_dir`.
+3. **If not found yet:** tell the user plainly ("Nothing yet -- these can
+   take a while to arrive.") and search (`ToolSearch` or equivalent) for a
    scheduling capability in this environment -- a scheduled-task feature, a
    Routine/trigger creator, anything that can deliver a message or resume
    this work later without the user having to remember to come back.
    - If found, ask the user whether to schedule one recheck roughly an
-     hour out (same opt-in-every-time rule). Don't schedule a tight
-     polling loop -- exports don't arrive that fast, and repeated
-     close-together checks just burn the connector for nothing. When it
-     fires, re-confirm the mailbox connector is still available, then
-     re-run the narrow search above. Cap this at around 6-8 attempts total
-     (roughly a workday's worth); past that, stop rescheduling
-     automatically and ask the user whether to keep trying or just wait
-     for the email and hand you the link or folder path themselves. Don't
-     set up an open-ended/indefinite recheck.
+     hour out (same opt-in-every-time rule), in plain words -- e.g. "Want
+     me to check again in about an hour, so you don't have to keep an eye
+     on it?" Don't schedule a tight polling loop -- exports don't arrive
+     that fast, and repeated close-together checks just burn the connector
+     for nothing. When it fires, re-confirm the email connector is still
+     available, then re-run the narrow search above. Cap this at around
+     6-8 attempts total (roughly a workday's worth); past that, stop
+     rescheduling automatically and ask the user whether to keep trying or
+     just wait for the email and hand you the link or folder path
+     themselves. Don't set up an open-ended/indefinite recheck.
    - If no scheduling capability is found, or the user doesn't want one,
      tell them plainly the export hasn't arrived yet, and either check
      back later yourself if asked or wait for the user to notice it and
@@ -134,11 +169,16 @@ instead of you having to watch for it?"* If yes:
 ## If no automated email check is possible or wanted
 
 No mail connector found, no mailbox match confirmed, or the user declines:
-**pause here and ask the user directly for the download link from the
-export-ready email.** If they've already followed that link and downloaded
-(and unzipped) the file themselves, the folder path works just as well --
-`locate_export_download` still works standalone once they hand you a
-downloaded zip, without needing anything above.
+**say plainly which of those it was** -- e.g. "I don't see an email
+connector on your Claude account, so I can't check your inbox myself" or
+"the email connected to Claude isn't the same one on your claude.ai
+account, so I'd be checking the wrong inbox" -- don't just silently fall
+back to asking for the link with no explanation. Then **ask the user
+directly for the download link from the email claude.ai sent them.** If
+they've already followed that link and downloaded (and unzipped) the file
+themselves, the folder path works just as well -- `locate_export_download`
+still works standalone once they hand you a downloaded zip, without
+needing anything above.
 
 If the user gives you the link instead of a folder: open it with the
 browser-automation tool if one is available and already approved (same

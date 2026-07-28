@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.1.2 -- 2026-07-27
+
+- `references/data-sources.md` expanded into a full file-reference guide
+  for local Claude Code CLI/Desktop/Cowork data: every path this plugin
+  actually reads keeps its existing tie to the reading code, plus a new
+  catalog of adjacent files seen on disk but deliberately not read
+  (`bridge-state.json`, `claude_desktop_config.json`, feature-flag/audit
+  caches, global/per-Space memory files, `IndexedDB`, `Cookies`,
+  `buddy-tokens.json`, etc.), Windows MSIX path-redirect provenance, and a
+  `Sources` section citing the official docs and community GitHub issues
+  this was reverse-engineered against.
+
+## 0.1.1 -- 2026-07-27
+
+- `SKILL.md` now shows its own version number right under the title,
+  kept in lockstep with `plugin.json`'s `version` -- an easy way to
+  confirm an installed/cached copy actually picked up the latest skill
+  content instead of a stale one.
+
 ## 0.1.0 -- 2026-07-25
 
 Initial release.
@@ -67,3 +86,13 @@ Initial release.
   this.
 - Analysis and dashboard generation only -- plan execution and full
   automation mining are deliberately out of scope for this version.
+- The export-acquisition flow now treats an already-connected mail
+  connector (Gmail, Outlook/Microsoft 365, etc.) as the expected case
+  rather than a long-shot, since most client accounts already have one
+  enabled, while still verifying it's the same mailbox as the claude.ai
+  account before using it. Adds an explicit plain-language narration
+  requirement throughout that flow -- since the person on the other end
+  is typically a non-technical business user, every "want me to check?"
+  now states what's being checked in the same breath, and email access
+  (available, unavailable, or mismatched) is always stated outright
+  rather than left implicit.
