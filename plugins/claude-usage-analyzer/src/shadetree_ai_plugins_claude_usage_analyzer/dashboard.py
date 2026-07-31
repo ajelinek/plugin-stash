@@ -60,7 +60,13 @@ body {
 .wrap { max-width: 920px; margin: 0 auto; }
 h1 { font-size: 1.5rem; margin: 0 0 0.25rem; }
 .subtitle { color: var(--ink-2); margin: 0 0 0.5rem; }
-.sources { color: var(--ink-muted); font-size: 0.85rem; margin: 0 0 2rem; }
+.sources { color: var(--ink-muted); font-size: 0.85rem; margin: 0 0 0.4rem; }
+.window {
+  display: inline-block; margin: 0 0 2rem; padding: 0.35rem 0.7rem;
+  border-radius: 6px; font-size: 0.85rem;
+  background: var(--accent-soft, rgba(120,140,255,0.12)); color: var(--ink-2);
+}
+.window-full { background: transparent; padding-left: 0; color: var(--ink-muted); }
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 0.75rem; margin-bottom: 2.5rem; }
 .stat-tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
@@ -286,6 +292,7 @@ def render_dashboard_html(plan: dict[str, Any], history: list[dict[str, Any]]) -
     subtitle = plan.get("subtitle")
     generated_at = plan.get("generated_at") or datetime.now().astimezone().isoformat()
     sources = plan.get("data_sources") or []
+    time_window = plan.get("time_window")
     stat_tiles = plan.get("stat_tiles") or []
     projects = plan.get("projects") or []
     leftovers = plan.get("leftovers") or []
@@ -302,6 +309,16 @@ def render_dashboard_html(plan: dict[str, Any], history: list[dict[str, Any]]) -
             f'from: {escape(", ".join(str(s) for s in sources))}</p>'
             if sources
             else f'<p class="sources">Generated {escape(str(generated_at))}</p>'
+        ),
+        # Rendered as its own prominent line rather than folded into the
+        # sources footnote: every number below describes this period, and a
+        # reader who misses that will read a windowed count as an account
+        # total. Absent means the run covered the full history.
+        (
+            f'<p class="window"><strong>Time window:</strong> '
+            f"{escape(str(time_window))}</p>"
+            if time_window
+            else '<p class="window window-full">Covering all available history.</p>'
         ),
     ]
 

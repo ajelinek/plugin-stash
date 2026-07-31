@@ -44,3 +44,17 @@ It's a proposal, not a change log. Nothing about generating or re-generating
 it moves, renames, or deletes a chat or Project -- see the main skill
 file's "What this is" and Non-goals sections. Don't let a polished-looking
 dashboard imply otherwise to the user.
+
+## Always state the time window
+
+`plan["time_window"]` is a free-text string rendered prominently under the
+header (e.g. `"2026-05-01 to 2026-07-29 (last 90 days)"`). Set it whenever
+the run was scoped. Omitted, the dashboard says "Covering all available
+history" instead -- so leaving it off a scoped run doesn't just lose
+context, it asserts something false, and every count on the page then reads
+as an account total.
+
+Build the string from the `time_window` block the data tools returned
+rather than from what was requested: `"90d"` resolves to a real date, and
+the resolved date is what the numbers actually describe. If
+`time_window.excluded` is non-zero, put that in `notes` too.

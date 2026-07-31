@@ -1,12 +1,20 @@
 {
   "name": "claude-usage-analyzer",
-  "version": "0.1.2",
-  "description": "Analyzes how you actually use Claude -- local Desktop/Cowork/CLI data plus an optional claude.ai account export -- and turns it into a live, self-updating dashboard: which chats belong in which Projects, what each Project's name/description/custom instructions and file structure should be, and what's stale vs. active. Read-only analysis only; never moves, renames, or deletes anything on its own.",
+  "version": "0.4.0",
+  "description": "Analyzes how you actually use Claude -- local Desktop/Cowork data plus an optional claude.ai account export -- and turns it into a live, self-updating dashboard: which chats belong in which Projects, what each Project's name/description/custom instructions and file structure should be, what's stale vs. active, and where your standing custom instructions have gone bloated or duplicated. Built for business users of the Claude Desktop app; Claude Code CLI sessions are deliberately excluded. Any run can cover all history or a chosen time window. Read-only analysis only; never moves, renames, or deletes anything on its own.",
   "author": {
     "name": "ajelinek"
   },
   "homepage": "https://github.com/ajelinek/shadetree-ai-plugins",
   "repository": "https://github.com/ajelinek/shadetree-ai-plugins",
   "license": "MIT",
-  "keywords": ["claude", "cowork", "workspace", "projects", "dashboard", "fastmcp", "shadetree-ai-plugins"]
+  "keywords": [
+    "claude",
+    "cowork",
+    "workspace",
+    "projects",
+    "dashboard",
+    "fastmcp",
+    "shadetree-ai-plugins"
+  ]
 }

@@ -23,6 +23,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from . import time_window
+
 FIRST_MESSAGE_PREVIEW_CHARS = 300
 
 _STOPWORDS = {
@@ -240,7 +242,18 @@ def render_memory_context(export_dir: Path) -> tuple[str, list[str]]:
 # --------------------------------------------------------------------------------
 
 
-def parse_export(export_dir: str, out_dir: str) -> dict[str, Any]:
+def parse_export(
+    export_dir: str, out_dir: str, since: Any = None, until: Any = None
+) -> dict[str, Any]:
+    """Parse an unzipped claude.ai account export into compact paged files.
+
+    `since`/`until` scope which conversations are written out and counted
+    (see `time_window.resolve` for accepted forms). The window is applied
+    before anything is written, so `conversations.jsonl`, the per-project
+    counts in `projects_index.json`, and every number in `stats` all
+    describe the same window -- and `stats.time_window` says what that was
+    and how much it excluded."""
+    window = time_window.resolve(since, until)
     export_path = Path(export_dir).expanduser()
     out_path = Path(out_dir).expanduser()
     out_path.mkdir(parents=True, exist_ok=True)
@@ -251,7 +264,20 @@ def parse_export(export_dir: str, out_dir: str) -> dict[str, Any]:
     conversations, convo_notes = load_conversations(export_path)
     projects, project_notes = load_projects(export_path)
     memory_md, memory_notes = render_memory_context(export_path)
-    notes = [*convo_notes, *project_notes, *memory_notes]
+
+    # Export timestamps are ISO strings, unlike the local store's epoch
+    # millis -- `time_window` normalizes both. Filter on the created..updated
+    # interval so a chat started before the window but continued inside it
+    # still counts.
+    conversations, window_summary = time_window.apply(
+        window, conversations, "created_at", "updated_at"
+    )
+    notes = [
+        *convo_notes,
+        *project_notes,
+        *memory_notes,
+        *time_window.summary_notes(window_summary, "conversations"),
+    ]
 
     conversations_path = out_path / "conversations.jsonl"
     with conversations_path.open("w", encoding="utf-8") as f:
@@ -291,8 +317,8 @@ def parse_export(export_dir: str, out_dir: str) -> dict[str, Any]:
             "with every export checked directly so far, the claude.ai web export format "
             "doesn't record which model generated a response at all. Model-usage analysis "
             "isn't available from export data; it's not just this run's export being unusual. "
-            "list_local_workspace's CLI sessions and Cowork/Chat local sessions are the "
-            "actual source for that signal (see references/data-sources.md)."
+            "list_local_workspace's Cowork/Chat local sessions are the actual source for "
+            "that signal (see references/data-sources.md)."
         )
 
     stats = {
@@ -303,14 +329,20 @@ def parse_export(export_dir: str, out_dir: str) -> dict[str, Any]:
         },
         "project_count": len(projects_index),
         "conversations_with_project": conversations_with_project,
+        "time_window": window_summary,
         "notes": notes,
     }
     stats_path = out_path / "stats.json"
     stats_path.write_text(json.dumps(stats, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     if stats["conversation_count"] < 10:
+        scope = (
+            " in this time window (widen it for a fuller picture)"
+            if window_summary["bounded"]
+            else ""
+        )
         stats["notes"].append(
-            "Fewer than 10 conversations in this export -- thin data means low-confidence "
+            f"Fewer than 10 conversations{scope} -- thin data means low-confidence "
             "recommendations, not no output. Say so plainly before presenting either analysis."
         )
 

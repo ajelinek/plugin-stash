@@ -9,15 +9,17 @@ shadetree_ai_plugins_claude_usage_analyzer.local_data computes for real once
 the MCP server is up -- this hook only ever does existence checks, never
 reads file contents.
 
-Why this hook exists at all: this plugin's tools read from
-`~/.claude` (Claude Code CLI data) and Claude Desktop's own app-data
-directory. A terminal/IDE running Claude Code already has ordinary
-filesystem access to both. But installed as a Desktop/Cowork plugin, the
-session may be running inside a folder-scoped Space/Project that never
-attached those directories -- in which case every path below reads as
-simply missing, not "permission denied", and the plugin's tools will look
-like they found nothing rather than erroring loudly. This hook exists to
-catch that silently-empty case at session start and say so explicitly.
+Why this hook exists at all: this plugin's tools read Claude Desktop's own
+app-data directory (and the user-visible Claude output folder). Installed as
+a Desktop/Cowork plugin, the session may be running inside a folder-scoped
+Space/Project that never attached those directories -- in which case every
+path below reads as simply missing, not "permission denied", and the
+plugin's tools will look like they found nothing rather than erroring
+loudly. This hook exists to catch that silently-empty case at session start
+and say so explicitly.
+
+Claude Code's `~/.claude` is deliberately not checked here: this plugin
+does not read CLI data at all (see local_data.py's module docstring).
 """
 
 from __future__ import annotations
@@ -32,8 +34,6 @@ from pathlib import Path
 def candidate_paths() -> dict[str, list[str]]:
     home = Path.home()
     system = platform.system()
-
-    cli = [str(home / ".claude")]
 
     desktop: list[str] = []
     if system == "Darwin":
@@ -57,35 +57,32 @@ def candidate_paths() -> dict[str, list[str]]:
 
     output_folders = [str(home / "Claude"), str(home / "Documents/Claude")]
 
-    return {"cli": cli, "desktop": desktop, "output": output_folders}
+    return {"desktop": desktop, "output": output_folders}
 
 
 def main() -> None:
     paths = candidate_paths()
-    all_paths = [*paths["cli"], *paths["desktop"], *paths["output"]]
+    all_paths = [*paths["desktop"], *paths["output"]]
     visible = [p for p in all_paths if os.path.exists(p)]
 
     if visible:
         return  # at least one known location is visible -- nothing to warn about
 
     desktop_list = "\n".join(f"  - {p}" for p in paths["desktop"])
-    cli_list = "\n".join(f"  - {p}" for p in paths["cli"])
+    output_list = "\n".join(f"  - {p}" for p in paths["output"])
     message = (
         "claude-usage-analyzer can't see any of the local Claude data locations it "
         "expects on this machine:\n\n"
         f"Claude Desktop app data:\n{desktop_list}\n\n"
-        f"Claude Code CLI data:\n{cli_list}\n\n"
-        "If Claude Desktop and/or the CLI are actually installed and used on this "
-        "machine, this almost always means this session is running inside a "
-        "folder-scoped Cowork Space or Project that hasn't been given access to "
-        "those folders yet -- a plugin's MCP server only sees what the session "
-        "itself can see, it doesn't get broader filesystem access on its own. "
-        "Add the relevant folder(s) above to this Space/Project's file access "
-        "scope (and, separately, wherever you plan to save/unzip a claude.ai "
-        "account data export -- Settings > Account > Export Data), then restart "
-        "the session. Running this from a terminal/IDE via the Claude Code CLI "
-        "instead doesn't need this step -- that already has ordinary filesystem "
-        "access from its working directory."
+        f"Claude output folder:\n{output_list}\n\n"
+        "If Claude Desktop is actually installed and used on this machine, this "
+        "almost always means this session is running inside a folder-scoped "
+        "Cowork Space or Project that hasn't been given access to those folders "
+        "yet -- a plugin's MCP server only sees what the session itself can see, "
+        "it doesn't get broader filesystem access on its own. Add the relevant "
+        "folder(s) above to this Space/Project's file access scope (and, "
+        "separately, wherever you plan to save/unzip a claude.ai account data "
+        "export -- Settings > Account > Export Data), then restart the session."
     )
     print(json.dumps({"systemMessage": message}))
 

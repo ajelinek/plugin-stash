@@ -10,9 +10,20 @@ This produces the `findings`, `model_usage`, and `recommendations`
 sections of the same `plan` dict Step 6 renders -- see the
 `render_dashboard` tool's docstring for the exact shape.
 
+## Everything here is scoped to the run's time window
+
+If Step 2a set a `since`/`until`, every count, tally, and "recurring across
+N chats" claim below describes that window and nothing else. Two things
+follow. A pattern needs to recur *within* the window to count as recurring
+-- three occurrences in a 90-day window is a stronger signal than three
+across four years, and the same three chats mean different things in each
+case. And every headline number needs the window attached when presented;
+`time_window` on each tool response has the resolved bounds and the
+excluded count to quote.
+
 ## Work from the compact summaries, not raw transcripts
 
-`list_local_workspace`'s CLI sessions and `parse_export`'s
+`list_local_workspace`'s local sessions and `parse_export`'s
 `conversations.jsonl` already carry everything this lens needs per
 chat/session, cheaply: `first_human_message`, `keywords`, `tool_names`,
 `message_count`. Reason from these fields across the whole corpus; only
@@ -26,19 +37,19 @@ Model data specifically is not uniformly available -- see
 [data-sources.md section 5](data-sources.md#5-where-model-usage-data-actually-lives)
 for the full picture; the short version:
 
-- **CLI sessions and Cowork/Chat local sessions** carry a `models_used`
-  tally (`{model: count}`, per-message accurate -- a session can switch
-  models mid-conversation, e.g. a sub-agent/background step running a
-  cheaper model). Cowork/Chat sessions also carry `default_model`/
-  `effort` -- the session's configured default -- as a fallback when no
-  `models_used` is present (no nested transcript matched, e.g. a chat
-  with no agentic work).
+- **Cowork/Chat local sessions** carry a `models_used` tally
+  (`{model: count}`, per-message accurate -- a session can switch models
+  mid-conversation, e.g. a sub-agent/background step running a cheaper
+  model), joined in from that session's own nested transcript. They also
+  carry `default_model`/`effort` -- the session's configured default -- as
+  a fallback when no `models_used` is present (no nested transcript
+  matched, e.g. a chat with no agentic work).
 - **Export conversations never carry this** -- confirmed directly, not
   just an occasional schema gap. If `parse_export`'s `stats.notes` flags
   a missing per-message model field, model-usage findings for claude.ai
   web chats simply aren't available this run; say so plainly rather than
   reporting a misleadingly empty model-usage section as if nothing was
-  found. Local CLI/Cowork data is the only source for this signal.
+  found. Local Cowork/Chat data is the only source for this signal.
 
 ## Model right-sizing
 
@@ -107,6 +118,24 @@ experimentation, etc.).
   stalls or pivots right after asking for something) suggest a connector
   or plugin worth setting up permanently rather than working around it
   each time -- also feeds the section below.
+- **Environment-settings hygiene** -- `list_local_workspace`'s
+  `memory_enabled`/`skills_enabled`/`plugins_enabled`/`custom_instructions`
+  per session (see
+  [data-sources.md section 6](data-sources.md#6-environment-settings-custom-instructions-and-what-is-genuinely-not-answerable))
+  are configuration, not usage, but worth a look: memory or skills turned
+  off for a Space/Project where the chat content clearly could have used
+  them (repeated re-explaining of the same standing context); a global
+  `custom_instructions` that's stale, missing, or contradicts a pattern
+  visible across many chats. Same evidence bar as everything else here --
+  a recurring pattern, not a one-off guess -- and these are per-session
+  values, so check whether they actually vary across a Space/Project's
+  sessions before reporting a single verdict for the whole thing.
+
+  The deeper version of this -- auditing the standing-instruction text
+  itself for bloat and cross-layer duplication, backed by
+  `get_instructions_inventory` -- is its own lens: see
+  [workspace-checkup.md](workspace-checkup.md). Report a given finding in
+  one lens or the other, not both.
 
 ## Recommending skills, plugins & connectors
 
@@ -117,13 +146,14 @@ exists first, and be explicit in the dashboard about which case you're in
 existing thing" or "this is worth building from scratch."
 
 1. **Check for an existing match before proposing something custom.**
-   Search (`ToolSearch` or equivalent) for discovery tools already
-   available in this environment -- names and exact capabilities vary by
-   environment, so look for whatever's actually there rather than
-   assuming a specific one exists: something that searches/lists public
-   Skills, something that searches/lists marketplace plugins, something
-   that searches an MCP registry, something that lists or suggests
-   connectors. Use whichever combination is available to check:
+   Where available, call the harness's own capability-inventory tools
+   directly -- `list_skills`, `list_plugins`, `list_connectors` -- rather
+   than duplicating them as plugin logic (see
+   [data-sources.md section 7](data-sources.md#7-chaining-with-native-harness-tools-instead-of-duplicating-them)
+   for the confirmed shapes and join keys). Exact names/availability still
+   vary by environment, so fall back to searching (`ToolSearch` or
+   equivalent) for whatever's actually there if those specific names
+   aren't present. Use whichever combination is available to check:
    - **Skills** -- does a public skill already cover this recurring
      workflow?
    - **Plugins** -- does an existing marketplace plugin already bundle
@@ -132,6 +162,13 @@ existing thing" or "this is worth building from scratch."
      specific SaaS product) this workflow keeps manually re-supplying by
      hand that a connector would supply directly, and is a connector for
      it already available in this environment but just not connected yet?
+
+   Confirmed gap, don't try to work around it: there's no callable tool
+   for raw MCP connector connection/auth status (is a connected connector
+   actually authenticated right now) -- that's plausibly harness-level
+   state, not something this discovery step can see. If that specific
+   question comes up, say it isn't answerable this run rather than
+   inferring it from `connected: true/false` alone.
 2. **If no discovery capability is available in this environment at
    all**, say so plainly and skip straight to the custom-build case below
    -- don't guess at what marketplace listings might exist from memory;

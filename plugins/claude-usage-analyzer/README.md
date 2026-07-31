@@ -1,17 +1,31 @@
 # claude-usage-analyzer
 
-Read-only analysis of how you actually use Claude: local Claude Desktop/
-Cowork/CLI data on this machine, plus an optional claude.ai account data
-export, turned into a live, self-updating HTML dashboard covering two
-lenses -- a workspace reorganization proposal (which chats belong in which
-Projects, each Project's name/description/custom instructions, what
-file/folder structure it needs, and what's stale vs. active) and a usage &
-best-practices review (project/chat counts, a model-usage breakdown,
-chats that used a more expensive/complex model than the task needed,
+Read-only analysis of how you actually use Claude: local Claude
+Desktop/Cowork data on this machine, plus an optional claude.ai account
+data export, turned into a live, self-updating HTML dashboard covering
+three lenses -- a workspace reorganization proposal (which chats belong in
+which Projects, each Project's name/description/custom instructions, what
+file/folder structure it needs, and what's stale vs. active), a usage &
+best-practices review (project/chat counts, a model-usage breakdown, chats
+that used a more expensive/complex model than the task needed,
 prompting/context patterns, and recommended public skills/plugins/
-connectors vs. custom ones worth building). It never moves, renames, or
-deletes a chat or Project itself -- it only reads and proposes; acting on
-the plan is always a separate, explicit step the user drives.
+connectors vs. custom ones worth building), and a workspace checkup (the
+standing custom instructions loaded into every conversation, audited for
+bloat and duplication across the global/Space/Project layers). It never
+moves, renames, or deletes a chat or Project itself -- it only reads and
+proposes; acting on the plan is always a separate, explicit step the user
+drives.
+
+Any run can cover all available history or a chosen time window -- every
+data tool takes the same `since`/`until` pair, and every response reports
+what that window resolved to and how much it excluded, so a scoped count is
+never mistaken for an account total.
+
+**Built for business users of the Claude Desktop app.** Claude Code CLI
+sessions are deliberately excluded -- Claude Code already ships `/doctor`,
+`/usage`, and `/context` for that surface, and mixing terminal activity
+into this report would both distort the counts and bury a non-developer in
+irrelevance.
 
 This plugin is primarily its skill
 (`skills/claude-usage-analyzer/SKILL.md`) -- the actual clustering/analysis
@@ -26,12 +40,11 @@ The machine needs `uv` installed and on `PATH`
 (https://docs.astral.sh/uv/getting-started/installation/).
 
 Full local-data analysis also needs this session to actually be able to
-see `~/.claude` (Claude Code CLI) and/or Claude Desktop's app-data
-directory. Installed as a Desktop/Cowork plugin inside a folder-scoped
-Space or Project, those folders have to be added to that Space/Project's
-file access scope explicitly -- the `usage_doctor` tool (and a SessionStart
-hook) explain exactly which folders and why on first run if they aren't
-visible yet.
+see Claude Desktop's app-data directory. Installed as a Desktop/Cowork
+plugin inside a folder-scoped Space or Project, that folder has to be added
+to the Space/Project's file access scope explicitly -- the
+`check_data_access` tool (and a SessionStart hook) explain exactly which
+folders and why on first run if they aren't visible yet.
 
 ## Install
 
@@ -56,8 +69,8 @@ Claude projects" to start once installed.
   Claude data location is visible to this session at all.
 - `skills/claude-usage-analyzer/SKILL.md` -- the full workflow: check
   access, decide what data to use (local/export/both), gather it, analyze
-  both lenses (reorganization, then usage & best-practices), render the
-  dashboard, present for review.
+  all three lenses (reorganization, usage & best-practices, workspace
+  checkup), render the dashboard, present for review.
 - `skills/claude-usage-analyzer/references/data-sources.md` -- exactly
   where every local path comes from, per platform, and how local data and
   an account export combine/overlap.
@@ -80,36 +93,60 @@ Claude projects" to start once installed.
   recommending an existing public skill/plugin/connector vs. a custom one
   worth building; the `model_usage`/`findings`/`recommendations` part of
   the `plan` shape.
+- `skills/claude-usage-analyzer/references/workspace-checkup.md` -- the
+  workspace-checkup lens: auditing standing instructions across the
+  global/Space/Project layers for cross-layer duplication, text repeated
+  Project-to-Project, and content Claude could already derive for itself.
+  Adapted from what Claude Code's `/doctor` does to `CLAUDE.md`.
 - `skills/claude-usage-analyzer/references/dashboard.md` -- rendering,
   the Artifact-publish-if-available fallback logic, and re-running over
   time.
 - `src/shadetree_ai_plugins_claude_usage_analyzer/local_data.py` --
-  cross-platform, read-only probing/parsing of local Desktop/Cowork/CLI
-  data, redacted throughout. Includes a per-message `models_used` tally
-  for CLI sessions and, via Cowork's own nested per-session transcript, for
-  Cowork/Chat sessions too, plus a `default_model`/`effort` fallback from
-  Desktop session metadata.
+  cross-platform, read-only probing/parsing of local Desktop/Cowork data,
+  redacted throughout. Includes a per-message `models_used` tally via
+  Cowork's own nested per-session transcript, a `default_model`/`effort`
+  fallback from Desktop session metadata, `memory_enabled`/
+  `skills_enabled`/`plugins_enabled`/`custom_instructions` per session, the
+  chat->Project/Space membership join (including cloud Projects whose local
+  metadata cache hasn't synced yet -- see `uncached_project_uuids`), and the
+  three-layer standing-instructions inventory with cross-layer duplication
+  detection.
 - `src/shadetree_ai_plugins_claude_usage_analyzer/export_data.py` --
   parses a claude.ai account export into paged files instead of one huge
   in-context blob, including a per-conversation `models_used` tally where
   the export schema carries one.
+- `src/shadetree_ai_plugins_claude_usage_analyzer/time_window.py` -- the
+  shared `since`/`until` scoping used by every data-pulling tool:
+  normalizing the two different timestamp shapes the two sources use,
+  interval-overlap matching, and the per-response `time_window` report.
 - `src/shadetree_ai_plugins_claude_usage_analyzer/dashboard.py` -- renders
   the HTML dashboard and keeps a local history log across runs.
 - `src/shadetree_ai_plugins_common` -- symlink to the repo's shared helpers
   (logging, `~/.shadetree-ai-plugins/claude-usage-analyzer/` state dir).
 - `tests/test_server.py` -- in-memory tests against synthetic fixture
-  directories (`uv run pytest` from repo root -- no real Claude
-  Desktop/CLI install required).
+  directories (`uv run pytest` from repo root -- no real Claude Desktop
+  install required). Includes a regression guard that fails if a Claude
+  Code CLI data reader is ever reintroduced.
 
 ## Tools
 
 | Tool | Purpose |
 |---|---|
-| `usage_doctor` | Preflight: which local data locations are visible to this session, per-platform. Call first. |
-| `list_local_workspace` | Redacted inventory of local Desktop/Cowork/CLI usage, including a per-session `models_used` tally (CLI sessions, and Cowork/Chat sessions via their nested transcript) plus a `default_model`/`effort` fallback, and reconstructed chat->Project/Space membership. |
+| `check_data_access` | Preflight: which local Desktop data locations are visible to this session, per-platform. Call first. Checks *visibility only* -- it is not a Desktop `/doctor`. |
+| `list_local_workspace` | Redacted inventory of local Desktop/Cowork usage, including a per-session `models_used` tally (from each Cowork/Chat session's nested transcript), a `default_model`/`effort` fallback, `memory_enabled`/`skills_enabled`/`plugins_enabled`/`custom_instructions` per session, and reconstructed chat->Project/Space membership. Optional `session_ids`/`project_uuid`/`folder_path`/`fields` params scope the response instead of always returning the full dump. |
+| `get_project_membership` | Just the project/Space join key for local sessions (cloud Project uuid/name, Space id/name, local folder paths) -- meant to chain after the harness's own `session_info.list_sessions()` and before `read_transcript`, without pulling the full inventory. |
+| `get_instructions_inventory` | All three layers of standing instructions (global custom instructions, Space `instructions`, cloud Project `prompt_template`) in one place, with character counts, session reach, and line-level duplication both against the global text and across Projects. Backs the workspace-checkup lens. |
 | `locate_export_download` | Find an already-downloaded claude.ai export zip (matched by content, not filename) and unpack it -- used by the scheduled-recheck flow. |
 | `parse_export` | Parse a claude.ai account data export into compact paged files. Never carries model-usage data -- confirmed absent from this export format. |
 | `render_dashboard` | Render an already-reasoned-about reorganization + usage/best-practices plan (including skill/plugin/connector recommendations) into a self-contained, re-renderable HTML dashboard with a progress-over-time history log. |
+
+Every tool that pulls sessions or conversations -- `list_local_workspace`,
+`get_project_membership`, `get_instructions_inventory`, `parse_export` --
+also takes `since`/`until`. Both accept a relative age (`"90d"`, `"6m"`), an
+ISO date, or epoch milliseconds; omit both for the full history. Matching is
+interval overlap, so a chat begun before the window but continued inside it
+still counts. A bad or backwards bound widens the read and reports the
+problem rather than silently returning nothing.
 
 See `skills/claude-usage-analyzer/SKILL.md` for the full usage guidance and
 each reference doc above for the details behind each step.
@@ -119,6 +156,11 @@ each reference doc above for the details behind each step.
 - **Executing** the plan -- actually creating/renaming Projects or moving
   chats in the claude.ai UI. Hand the reviewed plan over as a checklist for
   now.
+- **Applying** any workspace-checkup recommendation. The checkup proposes
+  instruction edits with the specific lines quoted; you make the change in
+  the app. Unlike Claude Code's `/doctor`, there is no fix-it step, and
+  that's deliberate -- the text is your own writing about your own
+  business.
 - **Full automation mining** -- a dedicated program that exhaustively
   clusters recurring workflows across the account and designs the
   automation. The usage & best-practices lens flags automation
