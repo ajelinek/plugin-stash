@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 from fastmcp import Client
-from shadetree_ai_plugins_claude_usage_analyzer import export_data, local_data
+from shadetree_ai_plugins_claude_usage_analyzer import dashboard, export_data, local_data
 from shadetree_ai_plugins_claude_usage_analyzer import server as srv
 from shadetree_ai_plugins_claude_usage_analyzer import time_window as tw
 
@@ -598,8 +598,240 @@ def test_read_cowork_session_transcripts(tmp_path):
 
     result = local_data.read_cowork_session_transcripts(desktop_root)
     assert result == {
-        "local_abc": {"models_used": {"claude-opus-5": 2}, "transcript_event_count": 2}
+        "local_abc": {
+            "models_used": {"claude-opus-5": 2},
+            "transcript_event_count": 2,
+            "message_count": 2,
+            "tools_invoked": {},
+            "mcp_servers_invoked": [],
+            "touched_dirs": [],
+            "url_hosts": [],
+            "transcript_sampled": False,
+        }
     }
+
+
+async def test_list_local_workspace_joins_every_transcript_signal(workspace_fixture):
+    """The join must carry *all* transcript signals onto the session, not a
+    hand-listed subset -- enumerating them individually is how the tool-use
+    and reach fields silently went missing once already.
+    """
+    async with Client(srv.mcp) as client:
+        r = await client.call_tool("list_local_workspace", {})
+        joined = {s["id"]: s for s in r.data["local_sessions"]}["local_sess2"]
+
+    # source_file is <base>/local-agent-mode-sessions/<account>/<org>/local_sess2.json;
+    # the transcript glob is rooted at <base>.
+    produced = set(local_data.read_cowork_session_transcripts(
+        Path(joined["source_file"]).parents[3]
+    )["local_sess2"])
+    assert produced <= set(joined), f"transcript signals dropped in join: {produced - set(joined)}"
+
+
+def test_read_cowork_session_transcripts_extracts_tool_and_reach_signals(tmp_path):
+    """What a session actually *did*: which tools it invoked, which MCP
+    servers those came from, and which directories/hosts it reached."""
+    desktop_root = tmp_path / "Claude"
+    transcript = (
+        desktop_root / "local-agent-mode-sessions" / "ACCOUNT" / "ORG"
+        / "local_abc" / ".claude" / "projects" / "proj" / "sess.jsonl"
+    )
+    transcript.parent.mkdir(parents=True)
+    with transcript.open("w", encoding="utf-8") as f:
+        f.write(json.dumps({
+            "type": "assistant",
+            "message": {"model": "claude-opus-5", "role": "assistant", "content": [
+                {"type": "tool_use", "name": "Read",
+                 "input": {"file_path": "/Users/x/work/notes.md"}},
+                {"type": "tool_use", "name": "mcp__claude-in-chrome__navigate",
+                 "input": {"url": "https://example.com/a/b?secret=1"}},
+            ]},
+        }) + "\n")
+        f.write(json.dumps({"type": "user", "message": {"role": "user", "content": []}}) + "\n")
+
+    result = local_data.read_cowork_session_transcripts(desktop_root)["local_abc"]
+    assert result["tools_invoked"] == {"Read": 1, "mcp__claude-in-chrome__navigate": 1}
+    assert result["mcp_servers_invoked"] == ["claude-in-chrome"]
+    # Parent directory only, never the filename; host only, never the path
+    # or query string.
+    assert result["touched_dirs"] == ["/Users/x/work"]
+    assert result["url_hosts"] == ["example.com"]
+    assert result["message_count"] == 2
+
+
+class TestStartHereSection:
+    """The ranked shortlist that opens the dashboard. Analysis stays
+    complete; this is the one section that prioritizes."""
+
+    def test_absent_when_not_supplied(self):
+        html = dashboard.render_dashboard_html({"title": "T"}, [])
+        assert '<section class="start-here">' not in html
+
+    def test_renders_above_the_detailed_sections(self):
+        html = dashboard.render_dashboard_html({
+            "title": "T",
+            "start_here": [{"title": "Fix me", "action": "Do this", "where": "Global"}],
+            "findings": [{"title": "f", "recommendation": "r"}],
+        }, [])
+        assert "Start here" in html
+        assert html.index("Start here") < html.index("best-practices findings")
+
+    def test_escapes_user_supplied_text(self):
+        html = dashboard.render_dashboard_html({
+            "title": "T",
+            "start_here": [{"title": "<script>x</script>", "action": "a"}],
+        }, [])
+        assert "<script>x</script>" not in html
+        assert "&lt;script&gt;" in html
+
+    def test_overflow_note_only_past_the_soft_limit(self):
+        def build(n):
+            return dashboard.render_dashboard_html({
+                "title": "T",
+                "start_here": [{"title": str(i), "action": "x"} for i in range(n)],
+            }, [])
+
+        assert "fixes listed" not in build(dashboard._START_HERE_SOFT_LIMIT)
+        assert "fixes listed" in build(dashboard._START_HERE_SOFT_LIMIT + 2)
+
+
+class TestMemoryParsing:
+    """The real memories.json is a single-element **list**, not an object.
+    Assuming a dict made every real export fall through to the raw-preview
+    branch, so these tests pin the confirmed shape.
+    """
+
+    REAL_SHAPE = [{
+        "conversations_memory": "**Work context**\n\nRuns a consultancy.\n\n**Top of mind**\n\nQ3.",
+        "project_memories": {
+            "uuid-a": "**Purpose & context**\n\nClient work.",
+            "uuid-b": "  ",
+        },
+        "account_uuid": "acct-1",
+    }]
+
+    def _write(self, tmp_path, payload):
+        (tmp_path / "memories.json").write_text(json.dumps(payload), encoding="utf-8")
+        return tmp_path
+
+    def test_list_wrapper_is_unwrapped(self, tmp_path):
+        summary, _ = export_data.summarize_memory(self._write(tmp_path, self.REAL_SHAPE))
+        assert summary["available"] is True
+        assert summary["account"]["char_count"] > 0
+
+    def test_categories_are_parsed_from_bold_headers(self, tmp_path):
+        summary, _ = export_data.summarize_memory(self._write(tmp_path, self.REAL_SHAPE))
+        assert summary["account"]["categories"] == ["Work context", "Top of mind"]
+
+    def test_project_memory_is_keyed_by_uuid_and_skips_blanks(self, tmp_path):
+        summary, _ = export_data.summarize_memory(self._write(tmp_path, self.REAL_SHAPE))
+        assert [p["project_uuid"] for p in summary["projects"]] == ["uuid-a"]
+
+    def test_bare_dict_still_accepted(self, tmp_path):
+        summary, _ = export_data.summarize_memory(self._write(tmp_path, self.REAL_SHAPE[0]))
+        assert summary["available"] is True
+
+    def test_render_does_not_fall_back_to_raw_dump(self, tmp_path):
+        md, notes = export_data.render_memory_context(self._write(tmp_path, self.REAL_SHAPE))
+        assert "Raw preview" not in md
+        assert "Runs a consultancy." in md
+        assert "### uuid-a" in md
+        assert notes == []
+
+    def test_missing_file_is_reported_not_raised(self, tmp_path):
+        summary, _ = export_data.summarize_memory(tmp_path)
+        assert summary == {"available": False, "account": None, "projects": []}
+
+    def test_empty_memory_is_flagged_as_possibly_off(self, tmp_path):
+        payload = [{"conversations_memory": "", "project_memories": {}}]
+        _, notes = export_data.summarize_memory(self._write(tmp_path, payload))
+        assert any("turned off" in n for n in notes)
+
+
+class TestMcpServerAttribution:
+    """`mcp__<server>__<tool>` is what makes the invoked-tool tally double as
+    a record of which connectors a session actually used."""
+
+    def test_extracts_server(self):
+        assert local_data._mcp_server_of("mcp__claude-in-chrome__navigate") == "claude-in-chrome"
+
+    def test_server_name_may_contain_single_underscores(self):
+        assert local_data._mcp_server_of("mcp__session_info__list") == "session_info"
+
+    def test_builtin_tool_is_not_a_server(self):
+        assert local_data._mcp_server_of("Read") is None
+
+    def test_malformed_prefix_returns_none(self):
+        assert local_data._mcp_server_of("mcp__nodelimiter") is None
+
+
+class TestCapabilityFieldShapes:
+    """Each of these fields has a different real on-disk shape; all four were
+    confirmed by inspecting a live session file."""
+
+    def test_enabled_tools_is_a_mapping_and_false_means_disabled(self):
+        raw = {"local:Control Chrome:close_tab": True, "local:Control Chrome:off": False}
+        assert local_data._names_of(raw) == ["local:Control Chrome:close_tab"]
+
+    def test_enabled_tool_keys_yield_server_display_labels(self):
+        raw = {
+            "local:Control Chrome:close_tab": True,
+            "local:Read and Send iMessages:send": True,
+            "local:Control Chrome:disabled": False,
+        }
+        assert local_data._enabled_mcp_server_labels(raw) == [
+            "Control Chrome", "Read and Send iMessages",
+        ]
+
+    def test_remote_servers_are_dicts_with_a_name(self):
+        raw = [{"uuid": "u", "name": "Gmail", "url": "https://x"}, {"uuid": "v"}]
+        assert local_data._names_of(raw) == ["Gmail"]
+
+    def test_plugin_names_come_from_slash_commands_not_install_paths(self):
+        # pluginInstallPaths basenames are opaque hashes, so slashCommands'
+        # `<plugin>:<command>` prefix is the only readable source.
+        raw = ["my-plugin:do-thing", "my-plugin:other", "second:cmd", "bare"]
+        assert local_data._plugin_names_of(raw) == ["my-plugin", "second"]
+
+    def test_length_of_distinguishes_absent_from_empty(self):
+        assert local_data._length_of(None) is None
+        assert local_data._length_of([]) == 0
+
+    def test_hosts_only_never_full_urls(self):
+        raw = ["https://a.example.com/path?token=secret", "not a url"]
+        assert local_data._hosts_of(raw) == ["a.example.com"]
+
+
+def test_effort_reads_effort_override_first(tmp_path):
+    """The on-disk key is `effortOverride`; `effort` has never been observed
+    and is a defensive fallback only."""
+    org_dir = tmp_path / "local-agent-mode-sessions" / "ACCOUNT" / "ORG"
+    _write_json(org_dir / "local_a.json", {"title": "a", "effortOverride": "max"})
+    _write_json(org_dir / "local_b.json", {"title": "b", "effort": "low"})
+    _write_json(org_dir / "local_c.json", {"title": "c"})
+
+    by_id = {s["id"]: s for s in local_data.read_local_sessions(tmp_path)}
+    assert by_id["local_a"]["effort"] == "max"
+    assert by_id["local_b"]["effort"] == "low"
+    assert by_id["local_c"]["effort"] is None
+
+
+def test_large_always_loaded_blobs_are_measured_never_returned(tmp_path):
+    """`systemPrompt` and `memoryGuidelinesTemplate` are ~49k and ~13.5k
+    characters of Anthropic scaffolding the user cannot edit. Their size is
+    the finding; their text would be unactionable and sensitive."""
+    org_dir = tmp_path / "local-agent-mode-sessions" / "ACCOUNT" / "ORG"
+    _write_json(org_dir / "local_a.json", {
+        "title": "a",
+        "systemPrompt": "x" * 49_488,
+        "memoryGuidelinesTemplate": "y" * 13_526,
+    })
+
+    session = local_data.read_local_sessions(tmp_path)[0]
+    assert session["system_prompt_char_count"] == 49_488
+    assert session["memory_guidelines_char_count"] == 13_526
+    assert "x" * 100 not in json.dumps(session)
+    assert "y" * 100 not in json.dumps(session)
 
 
 class TestMessageModel:
@@ -642,15 +874,16 @@ def export_fixture(tmp_path):
             "prompt_template": "Be a travel agent",
         }
     ])
-    _write_json(export_dir / "memories.json", {
-        "memory": "Global narrative about the user.",
-        "project_memories": [
-            {
-                "project_uuid": "p1", "project_name": "Japan Trip",
-                "memory": "User is planning a Japan trip.",
-            }
-        ],
-    })
+    # Real shape, confirmed against two live exports: a single-element list
+    # wrapping `conversations_memory` plus a `project_memories` dict keyed by
+    # project uuid. This fixture previously used an invented list-of-dicts
+    # shape carrying `project_name`, which is why the parser was written to
+    # match something no export actually produces.
+    _write_json(export_dir / "memories.json", [{
+        "conversations_memory": "Global narrative about the user.",
+        "project_memories": {"p1": "User is planning a Japan trip."},
+        "account_uuid": "acct-1",
+    }])
     return export_dir
 
 
@@ -679,7 +912,13 @@ async def test_parse_export_writes_expected_files(tmp_path, export_fixture):
 
         memory_md = (out_dir / "memory_context.md").read_text()
         assert "Global narrative about the user." in memory_md
-        assert "Japan Trip" in memory_md
+        # memories.json carries no project *name* -- only the uuid, which is
+        # the join key back into projects_index.json above.
+        assert "### p1" in memory_md
+        assert "User is planning a Japan trip." in memory_md
+
+        assert stats["memory"]["available"] is True
+        assert [p["project_uuid"] for p in stats["memory"]["projects"]] == ["p1"]
 
 
 async def test_parse_export_notes_missing_model_field(tmp_path, export_fixture):
@@ -1292,15 +1531,43 @@ def test_no_cli_surface_remains():
 
 
 def test_server_has_no_network_calls():
+    # `urllib.parse` is deliberately exempt: it is a pure string parser with
+    # no capacity to open a connection, and `local_data` uses it to reduce a
+    # URL to its host. Everything else under `urllib` -- `.request`,
+    # `.error`, and bare `import urllib` -- stays banned, as do urllib2/3.
     package_dir = (
         Path(__file__).resolve().parent.parent
         / "src" / "shadetree_ai_plugins_claude_usage_analyzer"
     )
     banned_imports = re.compile(
-        r"^\s*(import|from)\s+(requests|socket|urllib\d*|http\.client|httplib)\b", re.MULTILINE
+        r"^\s*(import|from)\s+"
+        r"(requests|socket|urllib\d*(?!\.parse\b)|http\.client|httplib)\b",
+        re.MULTILINE,
     )
     for py_file in package_dir.glob("*.py"):
         source = py_file.read_text()
         assert not banned_imports.search(source), (
             f"found a banned network-related import in {py_file}"
         )
+
+
+def test_network_guard_still_bans_real_network_modules():
+    """The exemption above is narrow on purpose -- guard the guard."""
+    banned_imports = re.compile(
+        r"^\s*(import|from)\s+"
+        r"(requests|socket|urllib\d*(?!\.parse\b)|http\.client|httplib)\b",
+        re.MULTILINE,
+    )
+    for forbidden in (
+        "import urllib",
+        "from urllib.request import urlopen",
+        "import urllib.error",
+        "import urllib3",
+        "import requests",
+        "import socket",
+        "from http.client import HTTPConnection",
+    ):
+        assert banned_imports.search(forbidden), f"guard no longer bans: {forbidden}"
+
+    for allowed in ("from urllib.parse import urlparse", "import json"):
+        assert not banned_imports.search(allowed), f"guard wrongly bans: {allowed}"

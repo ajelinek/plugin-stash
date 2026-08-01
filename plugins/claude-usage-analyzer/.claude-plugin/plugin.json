@@ -1,7 +1,7 @@
 {
   "name": "claude-usage-analyzer",
-  "version": "0.4.0",
-  "description": "Analyzes how you actually use Claude -- local Desktop/Cowork data plus an optional claude.ai account export -- and turns it into a live, self-updating dashboard: which chats belong in which Projects, what each Project's name/description/custom instructions and file structure should be, what's stale vs. active, and where your standing custom instructions have gone bloated or duplicated. Built for business users of the Claude Desktop app; Claude Code CLI sessions are deliberately excluded. Any run can cover all history or a chosen time window. Read-only analysis only; never moves, renames, or deletes anything on its own.",
+  "version": "0.5.0",
+  "description": "Analyzes how you actually use Claude -- local Desktop/Cowork data plus an optional claude.ai account export -- and turns it into a live, self-updating dashboard that opens with a ranked list of the fixes worth making first: which chats belong in which Projects, what each Project's name/description/custom instructions and file structure should be, what's stale vs. active, whether your models and effort levels match the work, what Claude has remembered and whether it has gone stale, which folders and hosts each session can reach, and which connectors, skills and plugins you have enabled but never actually use. Built for business users of the Claude Desktop app; Claude Code CLI sessions are deliberately excluded. Any run can cover all history or a chosen time window. Read-only analysis only; never moves, renames, or deletes anything on its own.",
   "author": {
     "name": "ajelinek"
   },

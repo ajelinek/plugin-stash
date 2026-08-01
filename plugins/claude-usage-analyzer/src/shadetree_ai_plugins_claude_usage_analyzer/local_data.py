@@ -40,8 +40,10 @@ import os
 import platform
 import re
 from collections import Counter
-from pathlib import Path
+from dataclasses import dataclass, field
+from pathlib import Path, PurePath
 from typing import Any
+from urllib.parse import urlparse
 
 from shadetree_ai_plugins_common import check_path
 
@@ -221,6 +223,97 @@ def _truncate(text: str | None, max_chars: int = _CUSTOM_INSTRUCTIONS_MAX_CHARS)
     return text[:max_chars] + " ...[truncated]"
 
 
+_INITIAL_MESSAGE_PREVIEW_CHARS = 400
+_MAX_NAME_LIST = 200
+# Defined here rather than beside the transcript scanner because it is used
+# as a default argument below, which is evaluated at definition time.
+_MAX_URL_HOSTS = 60
+
+# `enabledMcpTools` is keyed `local:<Server display name>:<tool>` with a
+# *bool* value -- confirmed against a real session. Two consequences worth
+# knowing before using it: a key being present does not mean the tool was
+# enabled (check the value), and the server segment is a display label
+# ("Control Chrome"), not the `mcp__<server>__<tool>` slug transcripts use
+# ("claude-in-chrome"). The two therefore do NOT join on a shared
+# identifier -- match them by eye, or not at all.
+_ENABLED_TOOL_KEY_PARTS = 3
+
+
+def _capped_strings(raw: Any, limit: int = _MAX_NAME_LIST) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    return [entry for entry in raw if isinstance(entry, str) and entry][:limit]
+
+
+def _length_of(raw: Any) -> int | None:
+    """Size of a str/list/dict, or None when the field is simply absent --
+    a distinction that matters, since 0 would read as "empty" rather than
+    "this session doesn't record it"."""
+    if isinstance(raw, (str, list, dict)):
+        return len(raw)
+    return None
+
+
+def _names_of(raw: Any, limit: int = _MAX_NAME_LIST) -> list[str]:
+    """Names out of the several shapes these config fields actually take:
+    a `{name: enabled}` mapping (only the enabled ones count), a list of
+    `{"name": ...}` dicts, or a plain list of strings."""
+    if isinstance(raw, dict):
+        return sorted(k for k, v in raw.items() if isinstance(k, str) and v)[:limit]
+    if isinstance(raw, list):
+        names: list[str] = []
+        for entry in raw:
+            if isinstance(entry, str) and entry:
+                names.append(entry)
+            elif isinstance(entry, dict) and isinstance(entry.get("name"), str):
+                names.append(entry["name"])
+        return names[:limit]
+    return []
+
+
+def _enabled_mcp_server_labels(raw: Any) -> list[str]:
+    """Server display labels from `enabledMcpTools`' `local:<Server>:<tool>`
+    keys. Server labels can contain spaces and colons are the delimiter, so
+    split with a bounded `split` and take the middle field."""
+    if not isinstance(raw, dict):
+        return []
+    labels: set[str] = set()
+    for key, enabled in raw.items():
+        if not enabled or not isinstance(key, str):
+            continue
+        parts = key.split(":", _ENABLED_TOOL_KEY_PARTS - 1)
+        if len(parts) == _ENABLED_TOOL_KEY_PARTS and parts[1]:
+            labels.add(parts[1])
+    return sorted(labels)
+
+
+def _plugin_names_of(slash_commands: Any) -> list[str]:
+    """`pluginInstallPaths` points at hashed temp directories
+    (`.../claude-hostloop-plugins/4bc8832a52bf73d1`), so its basenames are
+    not usable names. `slashCommands` entries are `<plugin>:<command>`
+    strings, which is where a readable plugin name actually comes from."""
+    if not isinstance(slash_commands, list):
+        return []
+    names: set[str] = set()
+    for entry in slash_commands:
+        if not isinstance(entry, str):
+            continue
+        plugin, delimiter, _ = entry.partition(":")
+        if delimiter and plugin:
+            names.add(plugin)
+    return sorted(names)
+
+
+def _hosts_of(raw: Any, limit: int = _MAX_URL_HOSTS) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    hosts: set[str] = set()
+    for entry in raw:
+        if isinstance(entry, str) and (host := _url_host(entry)):
+            hosts.add(host)
+    return sorted(hosts)[:limit]
+
+
 def _load_json(path: Path) -> Any | None:
     try:
         with path.open(encoding="utf-8") as f:
@@ -240,6 +333,23 @@ def _load_json(path: Path) -> Any | None:
 
 _MODEL_TALLY_MAX_LINES = 20_000
 
+# Past `_MODEL_TALLY_MAX_LINES` the scan keeps going, but only parses every
+# Nth line. Taking a flat "first N lines" prefix biases every distribution
+# below toward the *start* of a session -- which is exactly wrong for the
+# long, agentic Cowork sessions this plugin cares most about, where tool use
+# and model switches accumulate later. Sampling the tail keeps the scan
+# bounded while still seeing the whole file; `sampled` says it happened so a
+# caller can qualify a finding rather than quietly over-trusting it.
+_TAIL_SAMPLE_STRIDE = 10
+
+# Tool-call inputs that name a filesystem path or a URL. Only the *shape* of
+# what was reached is kept (parent directory, URL host) -- never file
+# contents, never a full URL with its query string.
+_TOOL_PATH_INPUT_KEYS = ("file_path", "path", "notebook_path")
+_TOOL_URL_INPUT_KEYS = ("url",)
+
+_MAX_TOUCHED_DIRS = 60
+
 
 def _model_of_transcript_record(record: dict[str, Any]) -> str | None:
     """Assistant-turn records carry the model under `message.model`; check
@@ -252,34 +362,144 @@ def _model_of_transcript_record(record: dict[str, Any]) -> str | None:
     return None
 
 
-def _scan_jsonl(path: Path, max_model_lines: int) -> tuple[Counter[str], int]:
-    """One pass over a JSONL transcript, tallying
-    `_model_of_transcript_record` across the first `max_model_lines` (model
-    id + count only, never message content). The exact total line count is
-    always returned -- iterating text lines is cheap even past the cap;
-    only the JSON-parse/tally work is capped, so one very long transcript
-    can't blow up scan time.
+_MCP_TOOL_PREFIX = "mcp__"
+
+
+def _mcp_server_of(tool_name: str) -> str | None:
+    """`mcp__<server>__<tool>` is the naming convention for a tool coming
+    from an MCP server -- confirmed against real transcripts (e.g.
+    `mcp__claude-in-chrome__navigate`). That makes the tool tally double as
+    a record of which *connectors* a session actually used, with no separate
+    lookup. A bare name (`Read`, `Edit`) is a built-in, not a connector, and
+    returns None. Server names can themselves contain single underscores, so
+    split on the `__` delimiter rather than on `_`."""
+    if not tool_name.startswith(_MCP_TOOL_PREFIX):
+        return None
+    remainder = tool_name[len(_MCP_TOOL_PREFIX) :]
+    server, delimiter, _ = remainder.partition("__")
+    if not delimiter or not server:
+        return None
+    return server
+
+
+def _mcp_servers_of(tool_counts: Counter[str]) -> set[str]:
+    return {
+        server for name in tool_counts if (server := _mcp_server_of(name)) is not None
+    }
+
+
+def _url_host(value: str) -> str | None:
+    """Host only -- a full URL carries paths and query strings that are user
+    data; the host alone answers "a site you didn't mention"."""
+    try:
+        host = urlparse(value).hostname
+    except ValueError:
+        return None
+    return host or None
+
+
+def _harvest_tool_use(block: dict[str, Any], out: _TranscriptScan) -> None:
+    """Record one `tool_use` content block: its tool name, plus the parent
+    directory of any path input and the host of any URL input. Confirmed
+    shape -- `{"type": "tool_use", "name": ..., "input": {...}}` -- against
+    real Cowork transcripts."""
+    name = block.get("name")
+    if isinstance(name, str) and name:
+        out.tool_counts[name] += 1
+
+    raw_input = block.get("input")
+    if not isinstance(raw_input, dict):
+        return
+
+    for key in _TOOL_PATH_INPUT_KEYS:
+        value = raw_input.get(key)
+        if isinstance(value, str) and value and len(out.touched_dirs) < _MAX_TOUCHED_DIRS:
+            # Platform-native flavour on purpose: this is the local machine's
+            # own data, so a Windows path must parse as one. PurePosixPath
+            # would read `C:\Users\x\f.txt` as a single component and report
+            # its parent as `.`.
+            out.touched_dirs.add(str(PurePath(value).parent))
+
+    for key in _TOOL_URL_INPUT_KEYS:
+        value = raw_input.get(key)
+        if isinstance(value, str) and value and len(out.url_hosts) < _MAX_URL_HOSTS:
+            host = _url_host(value)
+            if host:
+                out.url_hosts.add(host)
+
+
+@dataclass
+class _TranscriptScan:
+    """Everything one pass over a transcript collects. Counts and names only
+    -- no message text, no file contents, no full URLs."""
+
+    model_counts: Counter[str] = field(default_factory=Counter)
+    tool_counts: Counter[str] = field(default_factory=Counter)
+    touched_dirs: set[str] = field(default_factory=set)
+    url_hosts: set[str] = field(default_factory=set)
+    message_count: int = 0
+    line_count: int = 0
+    sampled: bool = False
+
+    def merge(self, other: _TranscriptScan) -> None:
+        self.model_counts.update(other.model_counts)
+        self.tool_counts.update(other.tool_counts)
+        self.touched_dirs |= other.touched_dirs
+        self.url_hosts |= other.url_hosts
+        self.message_count += other.message_count
+        self.line_count += other.line_count
+        self.sampled = self.sampled or other.sampled
+
+
+def _scan_jsonl(path: Path, max_model_lines: int) -> _TranscriptScan:
+    """One pass over a JSONL transcript collecting the signals in
+    `_TranscriptScan`: the per-message model tally, which tools were
+    actually *invoked* (as opposed to merely enabled -- see
+    `read_local_sessions`' `enabled_mcp_tool_names`), how many messages
+    there were, and the directories and URL hosts the session reached.
+
+    Never reads message text, file contents, or full URLs. The exact total
+    line count is always returned -- iterating text lines is cheap even past
+    the cap; only the JSON-parse work is bounded, and past the cap it
+    continues at `_TAIL_SAMPLE_STRIDE` rather than stopping, so the result
+    describes the whole file instead of just its opening.
 
     Raises `OSError` if `path` can't be opened at all -- callers decide
     whether that means skipping just this file's contribution or the
     whole session it belongs to; a malformed *line* within an openable
     file is always skipped silently instead, never raised."""
-    model_counts: Counter[str] = Counter()
-    line_count = 0
+    scan = _TranscriptScan()
     with path.open(encoding="utf-8") as f:
-        for line_count, line in enumerate(f, start=1):  # noqa: B007
-            if line_count > max_model_lines:
-                continue
+        for line_number, line in enumerate(f, start=1):
+            scan.line_count = line_number
+            if line_number > max_model_lines:
+                if line_number % _TAIL_SAMPLE_STRIDE:
+                    continue
+                scan.sampled = True
             try:
                 record = json.loads(line)
             except json.JSONDecodeError:
                 continue
             if not isinstance(record, dict):
                 continue
+
             model = _model_of_transcript_record(record)
             if model:
-                model_counts[model] += 1
-    return model_counts, line_count
+                scan.model_counts[model] += 1
+
+            if record.get("type") in ("assistant", "user"):
+                scan.message_count += 1
+
+            message = record.get("message")
+            if not isinstance(message, dict):
+                continue
+            content = message.get("content")
+            if not isinstance(content, list):
+                continue
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "tool_use":
+                    _harvest_tool_use(block, scan)
+    return scan
 
 
 # --------------------------------------------------------------------------------
@@ -352,6 +572,13 @@ def read_local_sessions(base_dir: Path) -> list[dict[str, Any]]:
     what every message actually used if it was changed mid-session; join
     against `read_cowork_session_transcripts` for per-message accuracy.
 
+    `effort` reads the on-disk key **`effortOverride`**. There is no
+    `effort` key: across 67 real session files it was present 0 times, while
+    `effortOverride` was present 40 times. The response key stays `effort`
+    because that is what the skill docs and callers already reference; only
+    the source key was ever wrong. Absent on a majority of sessions, so
+    `None` here means "not set", not "not readable".
+
     `memory_enabled`/`skills_enabled`/`plugins_enabled` and
     `custom_instructions` (the account's global custom instructions text,
     extracted from `systemPromptRendererAppends`) are this same session's
@@ -359,7 +586,35 @@ def read_local_sessions(base_dir: Path) -> list[dict[str, Any]]:
     a real file -- these are per-session (same pattern as `default_model`),
     not a separate aggregated "account settings" object, so a caller can see
     directly if a value disagrees across sessions rather than trusting one
-    collapsed value."""
+    collapsed value.
+
+    The configuration fields below describe what a session was *able* to do.
+    What it actually did lives in `read_cowork_session_transcripts`; the two
+    are meant to be crossed, not confused:
+
+    - `permission_mode` -- Manual/Auto/Skip. A cost signal, not just a
+      safety one: Auto consumes more usage than the others because of its
+      extra per-action safety-checking pass.
+    - `enabled_mcp_tool_names` / `remote_mcp_server_names` / `plugin_names`
+      / `slash_command_names` -- the capability surface that was switched
+      on. Names only: the raw `enabledMcpTools`/`remoteMcpServersConfig`
+      blobs carry full tool schemas and are stripped by `redact` (see
+      `_HEAVY_KEYS`), which is why these are summarized here under separate
+      keys rather than passed through.
+    - `egress_allowed_domains` / `web_fetch_allowed_url_hosts` -- the
+      session's network reach, hosts only.
+    - `fs_detected_file_count` / `cwd` -- filesystem footprint.
+    - `system_prompt_char_count` / `memory_guidelines_char_count` -- sizes
+      only, never content. Both are large (~49k and ~13.5k characters
+      respectively on a real session) and both are Anthropic's own
+      scaffolding that the user cannot edit, so their *text* would produce
+      no actionable finding while pulling a lot of sensitive material into
+      context. The counts still matter: they are what every turn pays
+      before any of the user's own instructions are added.
+
+    Field presence varies by session and was verified on a single machine
+    (67 sessions). Treat a missing field as normal and never let one
+    produce a finding on its own."""
     sessions: list[dict[str, Any]] = []
     for session_path in sorted(base_dir.glob("local-agent-mode-sessions/*/*/local_*.json")):
         data = _load_json(session_path)
@@ -381,12 +636,39 @@ def read_local_sessions(base_dir: Path) -> list[dict[str, Any]]:
                 "user_selected_folders": _normalize_folders(data.get("userSelectedFolders")),
                 "user_selected_project_uuids": data.get("userSelectedProjectUuids") or [],
                 "default_model": data.get("model"),
-                "effort": data.get("effort"),
+                # `effortOverride` first -- see the docstring. The `effort`
+                # fallback is defensive only: it has never been observed on
+                # disk, but this layout is a private cache that can change
+                # between Desktop versions, so don't hard-fail if it returns.
+                "effort": data.get("effortOverride") or data.get("effort"),
+                "permission_mode": data.get("permissionMode"),
                 "memory_enabled": data.get("memoryEnabled"),
                 "skills_enabled": data.get("skillsEnabled"),
                 "plugins_enabled": data.get("pluginsEnabled"),
                 "custom_instructions": _truncate(
                     _extract_custom_instructions(data.get("systemPromptRendererAppends"))
+                ),
+                "initial_message": _truncate(
+                    data.get("initialMessage"), _INITIAL_MESSAGE_PREVIEW_CHARS
+                ),
+                # Capability surface -- what was switched on, names only.
+                "enabled_mcp_tool_names": _names_of(data.get("enabledMcpTools")),
+                "enabled_mcp_server_labels": _enabled_mcp_server_labels(
+                    data.get("enabledMcpTools")
+                ),
+                "remote_mcp_server_names": _names_of(data.get("remoteMcpServersConfig")),
+                "plugin_names": _plugin_names_of(data.get("slashCommands")),
+                "plugin_install_count": _length_of(data.get("pluginInstallPaths")),
+                "slash_command_names": _capped_strings(data.get("slashCommands")),
+                # Reach -- folders come from `user_selected_folders` above.
+                "egress_allowed_domains": _capped_strings(data.get("egressAllowedDomains")),
+                "web_fetch_allowed_url_hosts": _hosts_of(data.get("webFetchAllowedUrls")),
+                "fs_detected_file_count": _length_of(data.get("fsDetectedFiles")),
+                "cwd": data.get("cwd"),
+                # Always-loaded weight -- sizes only, never the text.
+                "system_prompt_char_count": _length_of(data.get("systemPrompt")),
+                "memory_guidelines_char_count": _length_of(
+                    data.get("memoryGuidelinesTemplate")
                 ),
                 "source_file": str(session_path),
             }
@@ -408,24 +690,40 @@ def read_cowork_session_transcripts(base_dir: Path) -> dict[str, dict[str, Any]]
     `read_local_sessions`' `id`) so a caller can join per-message model
     accuracy onto that session's metadata. A session can have more than one
     matching transcript file (e.g. it touched more than one working
-    directory); tallies are summed across all of them."""
-    tallies: dict[str, tuple[Counter[str], int]] = {}
+    directory); tallies are summed across all of them.
+
+    This is also the only source for what a session *actually did*, as
+    opposed to what it was merely configured to be able to do:
+    `tools_invoked`/`message_count` here versus
+    `enabled_mcp_tool_names`/`plugin_names` in `read_local_sessions`. The
+    gap between those two pairs is the point -- see the capability-inventory
+    check in references/workspace-checkup.md."""
+    scans: dict[str, _TranscriptScan] = {}
     for jsonl_path in sorted(base_dir.glob(_COWORK_TRANSCRIPT_GLOB)):
         session_id = jsonl_path.parents[3].name
         try:
-            model_counts, line_count = _scan_jsonl(jsonl_path, _MODEL_TALLY_MAX_LINES)
+            scan = _scan_jsonl(jsonl_path, _MODEL_TALLY_MAX_LINES)
         except OSError:
             continue
-        existing_counts, existing_lines = tallies.get(session_id, (Counter(), 0))
-        existing_counts.update(model_counts)
-        tallies[session_id] = (existing_counts, existing_lines + line_count)
+        scans.setdefault(session_id, _TranscriptScan()).merge(scan)
 
     return {
         session_id: {
-            "models_used": dict(counts.most_common()),
-            "transcript_event_count": lines,
+            "models_used": dict(scan.model_counts.most_common()),
+            "transcript_event_count": scan.line_count,
+            "message_count": scan.message_count,
+            "tools_invoked": dict(scan.tool_counts.most_common()),
+            "mcp_servers_invoked": sorted(_mcp_servers_of(scan.tool_counts)),
+            "touched_dirs": sorted(scan.touched_dirs),
+            "url_hosts": sorted(scan.url_hosts),
+            # True when the transcript ran past `_MODEL_TALLY_MAX_LINES` and
+            # its tail was sampled rather than fully parsed. The tallies
+            # above still describe the whole file, but under-count the
+            # sampled portion -- say so rather than presenting an
+            # exact-looking number as if it were complete.
+            "transcript_sampled": scan.sampled,
         }
-        for session_id, (counts, lines) in tallies.items()
+        for session_id, scan in scans.items()
     }
 
 
@@ -638,12 +936,16 @@ def build_inventory(
             window, local_sessions, "created_at", "last_activity_at"
         )
 
-        transcript_models = read_cowork_session_transcripts(base_dir)
+        # Join in what each session *actually did*. Every key the transcript
+        # scan produces is carried through -- listing them individually here
+        # is how the tool-use and reach signals silently went missing once
+        # already, since the scan can grow a new field without this loop
+        # noticing.
+        transcript_signals = read_cowork_session_transcripts(base_dir)
         for session in local_sessions:
-            match = transcript_models.get(session["id"])
+            match = transcript_signals.get(session["id"])
             if match:
-                session["models_used"] = match["models_used"]
-                session["transcript_event_count"] = match["transcript_event_count"]
+                session.update(match)
 
         membership = join_local_sessions(local_sessions, spaces, project_cache)
 

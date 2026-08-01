@@ -10,8 +10,13 @@ description: >
   (project/chat counts, model-usage breakdown, chats that used a more
   expensive/complex model than the task needed, prompting/context patterns,
   and recommended public skills/plugins/connectors vs. custom ones worth
-  building), and a workspace checkup (standing custom instructions audited
-  for bloat and duplication across the global/Space/Project layers). Built
+  building), and a setup & effectiveness checkup (standing custom
+  instructions audited for bloat and duplication across the
+  global/Space/Project layers; memory content reviewed for staleness and
+  cross-topic drift; each Project graded on whether its name, description
+  and instructions match what it's actually for; which folders and hosts
+  each session can reach; and which connectors, skills and plugins are
+  installed or enabled versus actually used). Built
   for business users of the Claude Desktop app -- Claude Code CLI sessions
   are deliberately excluded, since Claude Code ships its own /doctor,
   /usage, and /context for that. Uses this plugin's bundled
@@ -21,7 +26,10 @@ description: >
   workspace", "audit my Claude usage", "reorganize my chats", "find
   patterns in my conversations", "how am I using Claude", "am I using the
   right models", "how can I optimize my Claude usage", "review my custom
-  instructions", or when handed a claude.ai data export folder. Analysis
+  instructions", "is my Claude set up correctly", "what skills should I
+  build", "which connectors am I actually using", "review my Claude
+  memory", "what folders can Claude see", or when handed a claude.ai data
+  export folder. Analysis
   Every data tool takes an optional since/until time window, so a run can
   cover all history or just a period ("the last 90 days", "since January").
   Analysis and dashboard generation only -- it never moves, renames, or
@@ -30,7 +38,7 @@ description: >
 
 # Claude Usage Analyzer
 
-**Skill version: 0.4.0** (matches `.claude-plugin/plugin.json`). Bump this
+**Skill version: 0.5.0** (matches `.claude-plugin/plugin.json`). Bump this
 line, in lockstep with that file's `version`, any time this skill's
 content changes -- it's the quickest way to confirm an installed copy
 has picked up the latest instructions rather than a stale cached one.
@@ -70,12 +78,17 @@ dashboard** covering three independent lenses on the same data:
    public skill/plugin/connector the user should just install/connect,
    versus a custom one worth building from scratch when nothing existing
    fits.
-3. A **workspace checkup**: the standing instructions that get loaded into
-   every conversation -- global custom instructions, each Space's, each
-   Project's -- audited for duplication across those layers and for
-   content Claude could already derive on its own. This is the
-   Desktop/Cowork counterpart of what Claude Code's `/doctor` does to
-   `CLAUDE.md`.
+3. A **setup & effectiveness checkup**: is the workspace itself configured
+   well, or is it quietly costing the user on every turn? Six areas --
+   standing instructions (global / Space / Project, audited for
+   duplication and derivable content), **memory** (what Claude has
+   actually remembered, and whether it has gone stale or cross-topic),
+   **Project and Space quality** (does each have a name, description and
+   instructions that match what it's for), **access scope** (which folders
+   and hosts each session can reach), **capability inventory** (what's
+   installed and enabled versus what's actually used), and settings
+   hygiene. This is the Desktop/Cowork counterpart of what Claude Code's
+   `/doctor` does to `CLAUDE.md`, widened to the rest of the setup.
 
 This version does analysis and dashboard generation **only**. It
 deliberately does not (yet):
@@ -238,13 +251,24 @@ above hand you structured data, not conclusions.
 ## Step 5: Analyze (usage & best-practices lens)
 
 See [references/usage-efficiency.md](references/usage-efficiency.md) for
-the full method: right-sizing model choice against task complexity using
-each session/conversation's model-usage signal, spotting context/prompting
-patterns worth a look, environment-settings hygiene (memory/skills/plugins
-toggles -- per session, see data-sources.md section 6 for what's actually
-available here vs. a confirmed hard boundary), and flagging (with evidence,
-not a deep build-out) recurring manual workflows that look like automation
+the full method: right-sizing **model** choice against task complexity,
+right-sizing the **effort** dial (low/medium/high/xhigh/max -- the largest
+under-examined cost/quality lever), **approval mode** (`permission_mode` --
+Auto costs *more* usage than Manual or Skip), **surface choice** (Cowork
+costs significantly more than chat; simple questions belong in chat),
+context/prompting patterns worth a look, and flagging (with evidence, not
+a deep build-out) recurring manual workflows that look like automation
 candidates.
+
+Two corrections worth carrying into any advice you give here, because
+older guidance gets both wrong:
+
+- **Don't tell the user to start a fresh chat to avoid a context limit.**
+  Long conversations auto-compact and that compaction doesn't consume usage
+  tokens. Start a fresh chat for *topic separation*, which keeps memory and
+  search clean -- not because of length.
+- **Scheduled tasks run remotely.** They no longer need the machine awake
+  with Desktop open, except when a task needs local files or apps.
 
 Model data isn't uniform across sources -- Cowork/Chat local sessions carry
 a per-message `models_used` tally (or a `default_model`/`effort` fallback);
@@ -269,36 +293,61 @@ stays cheap even on a large account. Only open a specific underlying file
 directly when a summary is genuinely ambiguous and it changes a finding
 you're about to report.
 
-## Step 6: Analyze (workspace checkup lens)
+## Step 6: Analyze (setup & effectiveness checkup lens)
 
 Call `get_instructions_inventory()` and see
 [references/workspace-checkup.md](references/workspace-checkup.md) for the
-full method. This is the Desktop/Cowork translation of what Claude Code's
-`/doctor` does to `CLAUDE.md`, applied to the three layers of standing
-instructions -- global custom instructions, each Space's `instructions`,
-each cloud Project's `prompt_template`:
+full method. Six areas:
 
-- Lines duplicated between a Project and the global text (paid for twice on
-  every turn in that Project).
-- The same text pasted into several Projects, which usually belongs one
-  level up instead.
-- Instructions describing things Claude can already see for itself -- the
-  Project's own files, its description, a connected data source. `/doctor`'s
-  most valuable check, and the one that needs real reading rather than a
-  count. Keep standing constraints, tone, jargon definitions, and anything
-  contradicting a sensible default; cut what's derivable.
-- Character counts weighed against how many sessions each blob actually
-  reaches.
+1. **Standing instructions** -- the three always-loaded layers (global
+   custom instructions, each Space's `instructions`, each cloud Project's
+   `prompt_template`): lines duplicated between a Project and the global
+   text, the same text pasted into several Projects, and instructions
+   describing things Claude can already see for itself. That last one is
+   `/doctor`'s most valuable check and needs real reading rather than a
+   count -- keep standing constraints, tone, jargon definitions and
+   anything contradicting a sensible default; cut what's derivable.
+2. **Memory** -- from `parse_export`'s `stats.memory` and
+   `memory_context.md`. Stale or contradicted entries, cross-topic
+   pollution in a project's pool, duplication against standing
+   instructions, and whether memory is on at all. Memory content is
+   **export-only**. Two traps worth telling the user outright: deleting a
+   conversation does *not* delete the memory it produced, and incognito
+   chats still appear in Team/Enterprise exports.
+3. **Project and Space quality** -- grade existing ones on name,
+   description and instructions. Report only concrete defects, and write
+   the replacement text for each; stay silent on the ones already fine.
+4. **Access scope** -- what each Space/session can reach
+   (`user_selected_folders`, `egress_allowed_domains`,
+   `web_fetch_allowed_url_hosts`), broad grants, and scope creep
+   (`touched_dirs`/`url_hosts` versus what was granted and asked for).
+   Anthropic publishes this guidance; the reference doc quotes it directly.
+5. **Capability inventory** -- what's installed and enabled
+   (`enabled_mcp_server_labels`, `plugin_names`, `remote_mcp_server_names`)
+   versus what was actually invoked (`tools_invoked`,
+   `mcp_servers_invoked`). Installed-but-never-used, used-constantly, and
+   needed-but-missing.
+6. **Settings hygiene** -- the per-session `memory_enabled` /
+   `skills_enabled` / `plugins_enabled` toggles.
 
 Report these as `findings`; propose the edits, never make them. An honest
 "the workspace looks fine" is a good outcome here -- don't manufacture
 findings to fill the section.
 
+**Then rank.** This lens can produce a lot, and the goal is a dashboard the
+user actually acts on. Analyze everything, then put roughly five
+highest-impact items into the plan's `start_here` list (Step 7), ordered
+most important first. Nothing gets dropped to make room -- `start_here`
+only decides what the reader meets first.
+
 ## Step 7: Render the dashboard
 
 Build the `plan` dict per `render_dashboard`'s documented shape (Step 4's
 `projects`/`leftovers`, plus the `findings`/`model_usage`/`recommendations`
-that Steps 5 and 6 produced) and call it. Set `time_window` to a readable
+that Steps 5 and 6 produced, plus the `start_here` shortlist) and call it.
+`start_here` renders above every detailed section and is the difference
+between a dashboard that gets acted on and one that gets skimmed -- set it
+whenever the run found anything worth prioritizing. Set `time_window` to a readable
 rendering of the Step 2a window (e.g. `"2026-05-01 to 2026-07-29 (last 90
 days)"`) whenever the run was scoped -- it renders under the header, and
 leaving it out makes every count below read as an account total. See

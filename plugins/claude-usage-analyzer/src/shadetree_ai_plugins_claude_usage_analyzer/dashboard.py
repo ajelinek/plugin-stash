@@ -89,6 +89,22 @@ h2 { font-size: 1.15rem; border-bottom: 1px solid var(--grid);
   padding: 0.5rem 0.7rem; font-size: 0.9rem; }
 .notes { color: var(--ink-2); font-size: 0.9rem; }
 .notes li { margin-bottom: 0.35rem; }
+.start-here { background: var(--surface-1); border: 1px solid var(--border);
+  border-left: 3px solid var(--accent); border-radius: 10px;
+  padding: 0.25rem 1.25rem 1rem; margin-bottom: 2.5rem; }
+.start-here h2 { border-bottom: none; margin-top: 1rem; margin-bottom: 0.25rem; }
+.fix-list { list-style: none; margin: 0; padding: 0; }
+.fix { display: flex; gap: 0.85rem; align-items: baseline;
+  padding: 0.7rem 0; border-top: 1px solid var(--grid); }
+.fix:first-child { border-top: none; }
+.fix-rank { flex: 0 0 1.5rem; height: 1.5rem; line-height: 1.5rem; text-align: center;
+  border-radius: 999px; background: var(--accent); color: #fff;
+  font-size: 0.8rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.fix-body { flex: 1 1 auto; min-width: 0; }
+.fix-title { margin: 0; font-weight: 600; }
+.fix-action { margin: 0.15rem 0 0; color: var(--ink-2); font-size: 0.92rem; }
+.fix-meta { margin: 0.3rem 0 0; color: var(--ink-muted); font-size: 0.78rem; }
+.fix-overflow { margin: 0.75rem 0 0; color: var(--ink-muted); font-size: 0.8rem; }
 table.history { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
 table.history th, table.history td { text-align: left; padding: 0.35rem 0.6rem;
   border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
@@ -287,6 +303,49 @@ def _history_section(history: list[dict[str, Any]]) -> str:
     )
 
 
+_START_HERE_SOFT_LIMIT = 5
+
+
+def _start_here_section(fixes: list[dict[str, Any]]) -> str:
+    """The ranked "do these first" list that opens the dashboard.
+
+    The rest of the page is deliberately complete -- every lens reports
+    everything it found. That completeness is only useful if the reader
+    isn't drowned in it, so this section is the one place that ranks. It is
+    a *pointer* to findings detailed below, not a separate set of them.
+    """
+    if not fixes:
+        return ""
+    rows = []
+    for rank, fix in enumerate(fixes, start=1):
+        title = escape(str(fix.get("title", "")))
+        action = escape(str(fix.get("action", "")))
+        where = fix.get("where")
+        impact = fix.get("impact")
+        meta = []
+        if where:
+            meta.append(f'<span class="fix-where">{escape(str(where))}</span>')
+        if impact:
+            meta.append(f'<span class="fix-impact">{escape(str(impact))}</span>')
+        rows.append(
+            f'<li class="fix"><span class="fix-rank">{rank}</span>'
+            f'<div class="fix-body"><p class="fix-title">{title}</p>'
+            f'<p class="fix-action">{action}</p>'
+            + (f'<p class="fix-meta">{" &middot; ".join(meta)}</p>' if meta else "")
+            + "</div></li>"
+        )
+    overflow = (
+        f'<p class="fix-overflow">{len(fixes)} fixes listed -- '
+        f"everything else this run found is detailed below.</p>"
+        if len(fixes) > _START_HERE_SOFT_LIMIT
+        else ""
+    )
+    return (
+        '<section class="start-here"><h2>Start here</h2>'
+        f'<ol class="fix-list">{"".join(rows)}</ol>{overflow}</section>'
+    )
+
+
 def render_dashboard_html(plan: dict[str, Any], history: list[dict[str, Any]]) -> str:
     title = escape(str(plan.get("title", "Claude usage analysis")))
     subtitle = plan.get("subtitle")
@@ -300,6 +359,7 @@ def render_dashboard_html(plan: dict[str, Any], history: list[dict[str, Any]]) -
     findings = plan.get("findings") or []
     model_usage = plan.get("model_usage") or []
     recommendations = plan.get("recommendations") or []
+    start_here = plan.get("start_here") or []
 
     sections = [
         f"<h1>{title}</h1>",
@@ -326,6 +386,10 @@ def render_dashboard_html(plan: dict[str, Any], history: list[dict[str, Any]]) -
         sections.append(
             '<div class="stat-grid">' + "".join(_stat_tile(t) for t in stat_tiles) + "</div>"
         )
+
+    # Directly after the headline numbers and before every detailed section:
+    # the reader should meet the ranked shortlist before the full inventory.
+    sections.append(_start_here_section(start_here))
 
     if findings:
         sections.append(f"<h2>Usage &amp; best-practices findings ({len(findings)})</h2>")

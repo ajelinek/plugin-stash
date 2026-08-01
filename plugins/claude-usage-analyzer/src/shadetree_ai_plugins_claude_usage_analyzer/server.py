@@ -327,6 +327,19 @@ def render_dashboard(plan: dict[str, Any], out_path: str | None = None) -> dict:
         total. Omit only when the run really did cover all history),
       "stat_tiles": [{"label": str, "value": str, "status": "good"|
         "warning"|"critical" (optional)}],
+      "start_here": [{"title": str, "action": str, "where": str
+        (optional, the exact place to make the change -- e.g. "Global
+        custom instructions" or a Project name), "impact": str
+        (optional, one short phrase on why it's worth doing)}]
+        (optional but strongly encouraged: the ranked shortlist of the
+        highest-impact fixes this run found, most important first,
+        rendered at the top of the dashboard before every detailed
+        section. Aim for about five. Every other section stays complete
+        -- this one exists so a reader meets the shortlist before the
+        full inventory, not so findings get dropped. Each entry should
+        point at something detailed further down rather than introducing
+        a finding that appears nowhere else. Omit entirely if the run
+        genuinely found nothing worth prioritizing),
       "projects": [{"name": str, "description": str,
         "instructions": str (optional, the Project's custom
         instructions), "chats": [str, ...], "files": [str, ...],

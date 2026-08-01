@@ -63,16 +63,46 @@ If a user genuinely wants their CLI usage analyzed, point them at
 |---|---|
 | `local-agent-mode-sessions/<account-uuid>/<org-uuid>/spaces.json` | The registry for folder-bound ("Local") Projects, called **Spaces** internally. **Real on-disk shape, confirmed directly: `{"spaces": [...]}` -- a dict wrapper, not a bare list.** (`read_spaces` originally assumed a bare list, which silently made `spaces`/`by_space_id` empty on every real install -- fixed to accept both, defensively, since this is unversioned.) Per entry: `{id, name, description, instructions, folders:[{path}]}` -- `instructions` is that Space's custom instructions text. |
 | `.../.project-cache/<project-uuid>/metadata.json` | Cached metadata for non-folder-bound **cloud** Projects opened recently from this device: `{uuid, name, description, synced_at, prompt_template}` -- `prompt_template` (confirmed present) is that Project's custom instructions text, the cloud-Project equivalent of a Space's `instructions` above. Only a subset of the account's real cloud Projects are cached here -- whichever were opened on this machine. Sibling `docs/`, `files/`, `memory.md` subfolders (cached project knowledge/files) exist alongside `metadata.json` but aren't read. |
-| `.../local_<uuid>.json` | Cowork + Chat-tab session metadata (title, timestamps, `userSelectedFolders`, `userSelectedProjectUuids`, and a top-level `model` + `effort` -- e.g. `claude-sonnet-5` / `high`/`xhigh` -- confirmed present, the session's *configured default*, not necessarily what every message actually used if it was changed mid-session). Also carries this session's stored environment/config fields (see section 6): `memoryEnabled`/`skillsEnabled`/`pluginsEnabled` (booleans) and `systemPromptRendererAppends`, one entry of which is a literal `<user_preferences>...</user_preferences>` block -- the account's global custom instructions text. `createdAt`/`lastActivityAt` are **epoch milliseconds as integers**, confirmed directly -- not ISO strings; `_activity_sort_key` handles both defensively. Excludes `claude-code-sessions/<uuid>.json` (Desktop's Code tab) and `cliSessionId` -- both are Claude Code, out of scope per section 0. |
-| `.../local_<uuid>/.claude/projects/<encoded-cwd>/*.jsonl` | Confirmed directly: Cowork keeps its own nested per-session transcript, one JSON object per line with `message.model` on each assistant turn. This is **Cowork's data**, not Claude Code's -- it merely shares the same JSONL layout (see section 0). This is the per-message-accurate source for a Cowork/Chat session -- a real sample came back a different (cheaper) model than the session's configured default, so sub-agents/background steps can run a different model than the one set on the session. `read_cowork_session_transcripts` tallies this, keyed by the same `local_<uuid>` id as the sibling metadata file above, for `build_inventory` to join in. The rest of that same `local_<uuid>/` directory (`uploads/`, `uploads-tmp/`, `outputs/` -- that session's own scratch space) isn't read. |
+| `.../local_<uuid>.json` | Cowork + Chat-tab session metadata (title, timestamps, `userSelectedFolders`, `userSelectedProjectUuids`, a top-level `model`, and the effort level under **`effortOverride`** -- e.g. `claude-sonnet-5` / `high`/`xhigh`; both are the session's *configured default*, not necessarily what every message actually used if it was changed mid-session. See section 1b: there is no `effort` key, and reading one was a real bug). Roughly 34 keys in total -- section 1b is the full inventory of what's read and why. Also carries this session's stored environment/config fields (see section 6): `memoryEnabled`/`skillsEnabled`/`pluginsEnabled` (booleans) and `systemPromptRendererAppends`, one entry of which is a literal `<user_preferences>...</user_preferences>` block -- the account's global custom instructions text. `createdAt`/`lastActivityAt` are **epoch milliseconds as integers**, confirmed directly -- not ISO strings; `_activity_sort_key` handles both defensively. Excludes `claude-code-sessions/<uuid>.json` (Desktop's Code tab) and `cliSessionId` -- both are Claude Code, out of scope per section 0. |
+| `.../local_<uuid>/.claude/projects/<encoded-cwd>/*.jsonl` | Confirmed directly: Cowork keeps its own nested per-session transcript, one JSON object per line with `message.model` on each assistant turn. This is **Cowork's data**, not Claude Code's -- it merely shares the same JSONL layout (see section 0). This is the per-message-accurate source for a Cowork/Chat session -- a real sample came back a different (cheaper) model than the session's configured default, so sub-agents/background steps can run a different model than the one set on the session. `read_cowork_session_transcripts` tallies this, keyed by the same `local_<uuid>` id as the sibling metadata file above, for `build_inventory` to join in. It is also the only source for **what a session actually did**, as opposed to what it was configured to be able to do: `tools_invoked` (per-tool counts), `mcp_servers_invoked` (parsed from the `mcp__<server>__<tool>` naming convention, which makes the tool tally double as a record of which connectors were really used), `message_count`, `touched_dirs` (**parent directories only**, from tool inputs like `file_path`) and `url_hosts` (**hosts only**, never full URLs). Message text and file contents are never read. Past a line cap the scan continues at a sampling stride rather than stopping, so tallies describe the whole file rather than just its opening; `transcript_sampled` flags when that happened. The rest of that same `local_<uuid>/` directory (`uploads/`, `uploads-tmp/`, `outputs/` -- that session's own scratch space) isn't read. |
 
 `userSelectedFolders` is inconsistently typed -- sometimes bare path
 strings, sometimes `{path: ...}` dicts. `_normalize_folders` handles both.
 
 Every `local_*.json` is redacted before this plugin ever returns it: keys
 containing `token`/`secret`/`auth`/`cookie`/`key` (case-insensitive) are
-stripped, and `enabledMcpTools`/`remoteMcpServersConfig` (50-150KB of tool
-JSON-Schema per file, pure noise here) are dropped outright.
+stripped, and the raw `enabledMcpTools`/`remoteMcpServersConfig` blobs
+(50-150KB of tool JSON-Schema per file, pure noise here) are dropped
+outright -- summarized *name* lists derived from them are returned instead,
+under different keys, so the signal survives without the bulk.
+
+#### 1b. The rest of `local_<uuid>.json` -- confirmed field inventory
+
+A session file carries roughly 34 top-level keys; before 0.5.0 this plugin
+read 10 of them. Field counts below are out of 67 real session files on one
+machine -- presence genuinely varies, so **treat an absent field as normal,
+never as a finding**.
+
+| On-disk key | Present | Returned as | Why it matters |
+|---|---|---|---|
+| `effortOverride` | 40/67 | `effort` | The five-level effort dial. **There is no `effort` key** -- it was 0/67. Reading it was a real bug: the field was silently `None` in every response while the docs told the caller to right-size against it. |
+| `permissionMode` | 57/67 | `permission_mode` | Manual/Auto/Skip. A cost signal -- Auto costs more than the other two. |
+| `enabledMcpTools` | 67/67 | `enabled_mcp_tool_names`, `enabled_mcp_server_labels` | A **dict** keyed `local:<Server display name>:<tool>` with a **bool** value -- a present key does not mean enabled. The server segment is a display label ("Control Chrome"), *not* the `mcp__<server>__<tool>` slug transcripts use. |
+| `remoteMcpServersConfig` | 67/67 | `remote_mcp_server_names` | List of `{uuid, name, url, tools}`. Remote connectors configured for the session. |
+| `slashCommands` | 67/67 | `slash_command_names`, `plugin_names` | List of `<plugin>:<command>` strings. This is the only readable source of **plugin names** -- see next row. |
+| `pluginInstallPaths` | 58/67 | `plugin_install_count` | Paths into hashed temp dirs (`.../claude-hostloop-plugins/4bc8832a52bf73d1`), so the basenames are opaque and useless as names. Count only. |
+| `initialMessage` | 67/67 | `initial_message` | The session's opening ask -- the local counterpart of the export's `first_human_message`. Truncated. |
+| `egressAllowedDomains` | 67/67 | `egress_allowed_domains` | Network reach. A value of `["*"]` means unrestricted outbound. |
+| `webFetchAllowedUrls` | 38/67 | `web_fetch_allowed_url_hosts` | Reduced to **hosts only** -- full URLs carry paths and query strings. |
+| `fsDetectedFiles` | 32/67 | `fs_detected_file_count` | Count only. |
+| `cwd` | 67/67 | `cwd` | The session's working directory. |
+| `systemPrompt` | 67/67 | `system_prompt_char_count` | **Size only.** ~49,000 characters of Anthropic scaffolding the user cannot edit -- the text would be unactionable and sensitive; the number is useful context for weighing the user's own instruction length. |
+| `memoryGuidelinesTemplate` | 67/67 | `memory_guidelines_char_count` | **Size only**, same reasoning. ~13,500 characters. |
+
+Read but not listed above because they were already documented: `title`,
+`createdAt`, `lastActivityAt`, `isArchived`, `userSelectedFolders`,
+`userSelectedProjectUuids`, `model`, `memoryEnabled`, `skillsEnabled`,
+`pluginsEnabled`, `systemPromptRendererAppends`.
 
 ### Other files under the base dir, not read by this plugin
 
@@ -133,13 +163,45 @@ reporting zero scheduled tasks.
 |---|---|---|
 | Product surface | **claude.ai web browser chats only.** Confirmed by format: export message objects are flat `{uuid, text, sender, content, ...}` with no `cwd`/`entrypoint`/`cliSessionId` -- the classic web/API shape. | **Desktop app only** -- Cowork and the Chat tab. Zero overlap with web chats. |
 | Project registry | The full cloud Project list *at export time*, including ones with zero local cache footprint. | `.project-cache` only holds Projects opened from *this device* recently -- can both undercount (never opened here) and include Projects newer than any export. |
-| Memory | `memories.json` -- one synthesized narrative per project + a global one, frozen at export time. | Per-Space/Project markdown notes, more granular, updated live rather than export-time-frozen (this plugin doesn't currently read these files -- see Known limitations below). |
+| Memory | `memories.json` -- **the only source of memory content** (see below). Frozen at export time. | Per-Space/Project markdown notes, more granular and updated live, but not read by this plugin (see Known limitations). Local data carries only the `memory_enabled` flag, never memory content. |
 | Freshness | Frozen at export time. | Live, this-device-only. |
 | Cross-device | Aggregates every web session on the account, any device. | This device's Desktop activity only. |
 
 **Bottom line:** combine both when both are available. Use the export for
 the authoritative cloud Project registry and web chat history; use local
 data for Cowork Spaces, Chat-tab sessions, and current-state signals. Join Projects on `uuid` to de-duplicate overlap.
+
+### 3a. `memories.json` -- confirmed shape
+
+Verified against two real exports:
+
+```json
+[{"conversations_memory": "...",
+  "project_memories": {"<project-uuid>": "..."},
+  "account_uuid": "..."}]
+```
+
+Three things to know, each of which was previously gotten wrong:
+
+- **The payload is a single-element list, not an object.** An earlier
+  version of this plugin called `.get` on it, so every real export fell
+  through to a raw-JSON-preview branch and emitted a truncated dump instead
+  of memory. If memory output ever looks like JSON again, check this first.
+- **Per-project memory is keyed by project uuid and carries no project
+  name.** The uuid is the join key back to `projects_index.json`; don't
+  expect a readable name in this file.
+- **Memory is categorized, rendered as markdown with bold headers**
+  (`**Work context**`, `**Top of mind**`, `**Purpose & context**`, ...).
+  Since 2026-07-10 memory is individual categorized entries that Claude
+  reads and updates during conversations -- **not** a summary regenerated
+  on a ~24-hour cycle. Any guidance saying otherwise, or telling a user to
+  "wait a day for memory to settle", is stale and should not be repeated.
+
+`parse_export` returns two views of this: `stats.memory` (availability,
+character counts, and category names -- account-level and per project uuid)
+for cheap auditing, and `memory_context.md` (the full text) for when a
+finding genuinely needs to read it. Prefer the former; memory text is the
+most sensitive material in an export.
 
 ## 4. Where model-usage data actually lives
 
@@ -357,6 +419,42 @@ app can answer that.
   it does read.
 - This is all a cache, not authoritative. Say so in the dashboard's data
   quality notes rather than presenting counts as exact.
+
+### Scheduled tasks are not readable -- confirmed boundary
+
+**Existing scheduled tasks cannot be audited by this plugin.** This is a
+hard boundary, not an unimplemented feature, and it should be stated
+plainly rather than worked around.
+
+Verified empirically: there are no schedule-shaped files anywhere under the
+Desktop app-data directory. The only Cowork caches on disk are
+`cowork-gb-cache.json` (GrowthBook feature flags), `cowork-policy-limits-cache.json`,
+`cowork-clientdata-cache.json`, and an empty `artifacts.json`.
+
+The reason is architectural: **scheduled tasks run remotely.** Since
+2026-07-07 they execute on Anthropic's servers on their own cadence, so
+they run "even when your computer is asleep or the Claude Desktop app is
+closed" -- there is nothing for the device to cache. (The surviving
+exception is a task that needs local files or apps, which still runs
+locally.) Two consequences:
+
+- Any older guidance that a scheduled task requires the machine awake with
+  Desktop open is **wrong for the general case**. Don't repeat it.
+- A task's per-task **model, effort and approval mode** -- which is where
+  the real cost lives, e.g. a daily digest quietly running on the top tier
+  at high effort in Auto approval -- is not visible here. If the user asks,
+  point them at the "Scheduled" page in the left sidebar rather than
+  guessing.
+
+What is *not* out of scope: **recommending new** scheduled tasks as
+automation candidates. That stays in
+[usage-efficiency.md](usage-efficiency.md). Only the audit of existing ones
+is unavailable.
+
+One partial signal worth knowing: scheduled-task *output* lands in the
+user-visible Claude output folder (section 1a). If that folder isn't in the
+session's file-access scope, anything a scheduled task produced is missing
+from the analysis entirely -- `check_data_access` already warns about this.
 
 ## Sources
 

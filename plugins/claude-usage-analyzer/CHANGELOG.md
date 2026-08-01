@@ -1,5 +1,116 @@
 # Changelog
 
+## 0.5.0 -- 2026-08-01
+
+Widens the third lens from "audit the standing instructions" into a full
+**setup & effectiveness checkup**, and fixes three bugs found while doing
+it -- two of which meant the plugin had been silently returning nothing
+where it claimed to return data.
+
+### Bugs fixed
+
+**`effort` was read from a key that does not exist.** The reader asked for
+`effort`; the on-disk key is `effortOverride`. Across 67 real session files
+`effort` appeared 0 times and `effortOverride` 40 times, so the field was
+`None` in every response the plugin has ever returned -- while the skill
+docs instructed the caller to right-size against it. Now reads
+`effortOverride`, with the old key kept as a defensive fallback.
+
+**`memories.json` was parsed against a shape no export produces.** The
+payload is a single-element **list** wrapping
+`{conversations_memory, project_memories, account_uuid}`; the parser
+assumed a bare object and called `.get` on it. Every real export therefore
+fell through to a raw-JSON-preview branch and emitted a 2,000-character
+truncated dump instead of memory. Verified against two live exports; the
+same fix now parses ~19,000 characters of real memory where it previously
+produced a dump. Per-project memory is keyed by project uuid (which joins
+to `projects_index.json`) and carries no project name -- the old code
+looked for a `project_name` field that does not exist.
+
+**The docs promised local fields that were never returned.** `SKILL.md` and
+`usage-efficiency.md` both said the analysis works from
+`first_human_message`/`keywords`/`tool_names`/`message_count` across both
+sources. Those existed only on the export side. The two sources now have an
+explicit field-mapping table, and the local side actually supplies the
+equivalents.
+
+### New session data
+
+`list_local_workspace` read 10 of a session file's ~34 keys. It now also
+returns: `permission_mode` (Manual/Auto/Skip -- a cost signal, since Auto
+consumes more usage than either of the others), `initial_message`,
+`enabled_mcp_tool_names` / `enabled_mcp_server_labels`,
+`remote_mcp_server_names`, `plugin_names`, `slash_command_names`,
+`plugin_install_count`, `egress_allowed_domains`,
+`web_fetch_allowed_url_hosts`, `fs_detected_file_count`, `cwd`, and
+character counts for `system_prompt` and `memory_guidelines`.
+
+The large always-loaded blobs are measured, never returned -- roughly
+49,000 and 13,500 characters of Anthropic scaffolding the user cannot edit,
+so the text would be unactionable and sensitive while the size is useful
+context for judging the user's own instruction length.
+
+### What a session actually did
+
+The nested-transcript scan already ran on every call to tally models; it
+now also extracts `tools_invoked`, `mcp_servers_invoked` (parsed from the
+`mcp__<server>__<tool>` convention, so the tool tally doubles as a record
+of which connectors were really used), `message_count`, `touched_dirs`
+(parent directories only) and `url_hosts` (hosts only). No message text,
+no file contents, no full URLs.
+
+Crossing this against the configuration fields above -- what a session
+*could* do versus what it *did* -- is where most of the new findings come
+from.
+
+The scan's line cap no longer truncates. Past the cap it continues at a
+sampling stride instead of stopping, because taking a flat prefix biased
+every distribution toward the opening of a session -- exactly wrong for the
+long agentic sessions this is meant to measure. `transcript_sampled` flags
+when sampling occurred.
+
+### New checks
+
+- **Memory** -- stale or contradicted entries, cross-topic pollution in a
+  project's pool, duplication against standing instructions, and whether
+  memory is on at all. Memory is now individual categorized entries rather
+  than a daily synthesized summary; guidance to "wait a day for memory to
+  settle" has been removed as stale.
+- **Project and Space quality** -- existing Projects graded on whether
+  their name, description and instructions match what they are for, with
+  replacement text written for each defect found and silence on the ones
+  already fine.
+- **Access scope** -- what each Space and session can reach, broad grants
+  versus dedicated working folders, and scope creep measured as directories
+  and hosts actually touched versus what was granted. Quotes Anthropic's
+  published guidance rather than inventing a standard.
+- **Capability inventory** -- installed and enabled versus actually
+  invoked, yielding installed-but-never-used, used-constantly, and
+  needed-but-missing.
+- **Effort, approval mode and surface choice** as explicit cost levers.
+
+### Dashboard
+
+New optional `start_here` field on the plan: a ranked shortlist of the
+highest-impact fixes, rendered above every detailed section. Analysis stays
+complete -- this only decides what the reader meets first.
+
+### Corrected guidance
+
+- **Scheduled tasks run remotely** and no longer need the machine awake
+  with Desktop open, except when a task needs local files or apps.
+  Auditing *existing* scheduled tasks is documented as a confirmed hard
+  boundary: nothing schedule-shaped is stored on disk, because they execute
+  server-side. Recommending *new* ones is unaffected.
+- **Don't advise starting a fresh chat to avoid a context limit.** Long
+  conversations auto-compact and that compaction does not consume usage
+  tokens. Topic separation is the real reason to start fresh.
+- **Project knowledge is cached**, so only new portions count against
+  limits on reuse -- the highest-leverage efficiency change available, and
+  now the stated rationale behind each proposed Project's file list.
+- **Context is not shared between chats in a Project** unless it is in the
+  knowledge base -- a common and costly misconception.
+
 ## 0.4.0 -- 2026-07-29
 
 Makes time scoping a first-class part of every run. Previously the only
