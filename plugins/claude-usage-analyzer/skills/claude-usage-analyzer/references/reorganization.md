@@ -63,6 +63,22 @@ Build a `plan` dict per `render_dashboard`'s documented shape:
    real, usable instructions, not a placeholder), which existing `chats`
    move in (by name, not verbatim content), and what `files` (reference
    docs, knowledge files) it needs and why.
+
+   `files` is not filing for its own sake, and it's worth telling the user
+   the reason. **Documents uploaded to project knowledge are cached, and
+   only new or uncached portions count against usage limits on reuse** --
+   which makes moving a repeatedly-pasted document into project knowledge
+   the single highest-leverage efficiency change available in the whole
+   analysis. It also fixes a related trap: **context is not shared between
+   chats in a Project unless it is in the knowledge base**, so anything the
+   user expects sibling chats to "already know" has to live there.
+
+   Two more things worth knowing before recommending a large knowledge
+   base. On paid plans, retrieval kicks in automatically as project
+   knowledge approaches the context limit, expanding capacity rather than
+   truncating -- so pruning purely to save context is unnecessary.
+   Descriptive filenames and related content grouped together are the
+   documented ways to make that retrieval work well.
 3. **`leftovers`** -- chats that don't fit any recommended Project. Say
    what you propose for them (archive, leave standalone, revisit later)
    rather than silently dropping them from the plan.

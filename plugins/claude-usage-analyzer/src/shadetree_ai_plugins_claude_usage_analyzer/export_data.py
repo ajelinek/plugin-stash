@@ -23,6 +23,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from . import time_window
+
 FIRST_MESSAGE_PREVIEW_CHARS = 300
 
 _STOPWORDS = {
@@ -188,11 +190,100 @@ def load_projects(export_dir: Path) -> tuple[dict[str, dict[str, Any]], list[str
 
 
 # --------------------------------------------------------------------------------
-# memories.json -- Claude's own synthesized narrative, verbatim
+# memories.json -- Claude's memory of the account, verbatim
+#
+# Confirmed shape, verified against two real exports:
+#
+#     [{"conversations_memory": str,                  # non-project memory
+#       "project_memories": {<project-uuid>: str},    # one blob per project
+#       "account_uuid": str}]
+#
+# Note the **list** wrapper -- the whole payload is a single-element list, not
+# a bare object. An earlier version of this module assumed a dict and called
+# `.get` on it, which meant every real export fell through to the raw-preview
+# branch and emitted a truncated JSON dump instead of memory. If this ever
+# looks wrong again, check that first.
+#
+# Since 2026-07-10 memory is individual categorized entries rather than a
+# daily synthesized summary. The export renders those as markdown with bold
+# category headers (`**Work context**`, `**Top of mind**`, ...), so the
+# categories are recoverable by parsing headers -- see `_memory_categories`.
+# Do not reintroduce any "memory is regenerated every 24 hours" assumption.
 # --------------------------------------------------------------------------------
 
-_GLOBAL_MEMORY_KEYS = ("memory", "global_memory", "account_memory", "narrative")
-_PROJECT_MEMORIES_KEYS = ("project_memories", "projects", "per_project_memories")
+_CONVERSATIONS_MEMORY_KEYS = ("conversations_memory", "memory", "global_memory", "narrative")
+_PROJECT_MEMORIES_KEYS = ("project_memories", "per_project_memories")
+_MEMORY_CATEGORY_RE = re.compile(r"^\s*\*\*(.+?)\*\*\s*$", re.MULTILINE)
+_MEMORY_RAW_PREVIEW_CHARS = 2000
+
+
+def _memory_payload(data: Any) -> dict[str, Any] | None:
+    """Unwrap the single-element list the export actually ships, while still
+    accepting a bare object in case the shape changes back."""
+    if isinstance(data, list):
+        return next((e for e in data if isinstance(e, dict)), None)
+    if isinstance(data, dict):
+        return data
+    return None
+
+
+def _first_str(payload: dict[str, Any], keys: tuple[str, ...]) -> str | None:
+    return next((payload[k] for k in keys if isinstance(payload.get(k), str) and payload[k]), None)
+
+
+def _memory_categories(text: str) -> list[str]:
+    """Category headers within one memory blob. These are what makes a
+    cross-topic-pollution finding possible -- a project whose memory carries
+    categories belonging to unrelated work."""
+    return [m.strip() for m in _MEMORY_CATEGORY_RE.findall(text) if m.strip()]
+
+
+def summarize_memory(export_dir: Path) -> tuple[dict[str, Any], list[str]]:
+    """Structured counts for the workspace-checkup lens: how much memory
+    exists, where it lives, and what categories it covers. Sizes and category
+    names only -- the memory *text* stays in `memory_context.md` for the
+    caller to read deliberately, since it is the most sensitive material in
+    an export (Claude's synthesized profile of the user)."""
+    notes: list[str] = []
+    payload = _memory_payload(_load_json(export_dir / "memories.json"))
+    if payload is None:
+        return {"available": False, "account": None, "projects": []}, notes
+
+    account_text = _first_str(payload, _CONVERSATIONS_MEMORY_KEYS)
+    raw_projects = next(
+        (payload[k] for k in _PROJECT_MEMORIES_KEYS if isinstance(payload.get(k), dict)), {}
+    )
+
+    projects = [
+        {
+            "project_uuid": uuid,
+            "char_count": len(text),
+            "categories": _memory_categories(text),
+        }
+        for uuid, text in raw_projects.items()
+        if isinstance(text, str) and text.strip()
+    ]
+    projects.sort(key=lambda p: p["char_count"], reverse=True)
+
+    if account_text is None and not projects:
+        notes.append(
+            "memories.json is present but carries neither account-level nor per-project "
+            "memory -- memory may be turned off for this account, or paused."
+        )
+
+    return {
+        "available": True,
+        "account": (
+            None
+            if account_text is None
+            else {
+                "char_count": len(account_text),
+                "categories": _memory_categories(account_text),
+            }
+        ),
+        # Keyed by project uuid, which joins directly to projects_index.json.
+        "projects": projects,
+    }, notes
 
 
 def render_memory_context(export_dir: Path) -> tuple[str, list[str]]:
@@ -203,34 +294,35 @@ def render_memory_context(export_dir: Path) -> tuple[str, list[str]]:
         notes.append(f"{path} not present in this export -- no memory_context available.")
         return "# Memory context\n\n(No memories.json in this export.)\n", notes
 
-    if not isinstance(data, dict):
-        notes.append(f"{path} present but not a JSON object -- dumping raw preview only.")
-        return f"# Memory context\n\n```\n{json.dumps(data, indent=2)[:2000]}\n```\n", notes
+    payload = _memory_payload(data)
+    if payload is None:
+        notes.append(f"{path} present but not in a recognized shape -- raw preview only.")
+        preview = json.dumps(data, indent=2)[:_MEMORY_RAW_PREVIEW_CHARS]
+        return f"# Memory context\n\n```\n{preview}\n```\n", notes
 
     lines = ["# Memory context", ""]
 
-    global_text = next((data[k] for k in _GLOBAL_MEMORY_KEYS if isinstance(data.get(k), str)), None)
-    if global_text:
-        lines += ["## Account-level memory", "", global_text.strip(), ""]
+    account_text = _first_str(payload, _CONVERSATIONS_MEMORY_KEYS)
+    if account_text:
+        lines += ["## Account-level memory (non-project chats)", "", account_text.strip(), ""]
 
-    project_entries = next(
-        (data[k] for k in _PROJECT_MEMORIES_KEYS if isinstance(data.get(k), list)), None
+    project_memories = next(
+        (payload[k] for k in _PROJECT_MEMORIES_KEYS if isinstance(payload.get(k), dict)), None
     )
-    if project_entries:
+    if project_memories:
         lines += ["## Per-project memory", ""]
-        for entry in project_entries:
-            if not isinstance(entry, dict):
+        for uuid, text in project_memories.items():
+            if not isinstance(text, str) or not text.strip():
                 continue
-            name = (
-                entry.get("project_name") or entry.get("name") or entry.get("project_uuid") or "?"
-            )
-            text = entry.get("memory") or entry.get("text") or ""
-            if not text:
-                continue
-            lines += [f"### {name}", "", text.strip(), ""]
-    elif not global_text:
+            # Heading is the project uuid -- join it to a name via
+            # projects_index.json rather than guessing here.
+            lines += [f"### {uuid}", "", text.strip(), ""]
+    elif not account_text:
         notes.append(f"{path} has an unrecognized shape -- dumping a raw preview only.")
-        lines += ["## Raw preview", "", "```", json.dumps(data, indent=2)[:2000], "```"]
+        lines += [
+            "## Raw preview", "", "```",
+            json.dumps(data, indent=2)[:_MEMORY_RAW_PREVIEW_CHARS], "```",
+        ]
 
     return "\n".join(lines) + "\n", notes
 
@@ -240,7 +332,18 @@ def render_memory_context(export_dir: Path) -> tuple[str, list[str]]:
 # --------------------------------------------------------------------------------
 
 
-def parse_export(export_dir: str, out_dir: str) -> dict[str, Any]:
+def parse_export(
+    export_dir: str, out_dir: str, since: Any = None, until: Any = None
+) -> dict[str, Any]:
+    """Parse an unzipped claude.ai account export into compact paged files.
+
+    `since`/`until` scope which conversations are written out and counted
+    (see `time_window.resolve` for accepted forms). The window is applied
+    before anything is written, so `conversations.jsonl`, the per-project
+    counts in `projects_index.json`, and every number in `stats` all
+    describe the same window -- and `stats.time_window` says what that was
+    and how much it excluded."""
+    window = time_window.resolve(since, until)
     export_path = Path(export_dir).expanduser()
     out_path = Path(out_dir).expanduser()
     out_path.mkdir(parents=True, exist_ok=True)
@@ -251,7 +354,22 @@ def parse_export(export_dir: str, out_dir: str) -> dict[str, Any]:
     conversations, convo_notes = load_conversations(export_path)
     projects, project_notes = load_projects(export_path)
     memory_md, memory_notes = render_memory_context(export_path)
-    notes = [*convo_notes, *project_notes, *memory_notes]
+    memory_summary, memory_summary_notes = summarize_memory(export_path)
+
+    # Export timestamps are ISO strings, unlike the local store's epoch
+    # millis -- `time_window` normalizes both. Filter on the created..updated
+    # interval so a chat started before the window but continued inside it
+    # still counts.
+    conversations, window_summary = time_window.apply(
+        window, conversations, "created_at", "updated_at"
+    )
+    notes = [
+        *convo_notes,
+        *project_notes,
+        *memory_notes,
+        *memory_summary_notes,
+        *time_window.summary_notes(window_summary, "conversations"),
+    ]
 
     conversations_path = out_path / "conversations.jsonl"
     with conversations_path.open("w", encoding="utf-8") as f:
@@ -291,8 +409,8 @@ def parse_export(export_dir: str, out_dir: str) -> dict[str, Any]:
             "with every export checked directly so far, the claude.ai web export format "
             "doesn't record which model generated a response at all. Model-usage analysis "
             "isn't available from export data; it's not just this run's export being unusual. "
-            "list_local_workspace's CLI sessions and Cowork/Chat local sessions are the "
-            "actual source for that signal (see references/data-sources.md)."
+            "list_local_workspace's Cowork/Chat local sessions are the actual source for "
+            "that signal (see references/data-sources.md)."
         )
 
     stats = {
@@ -303,14 +421,24 @@ def parse_export(export_dir: str, out_dir: str) -> dict[str, Any]:
         },
         "project_count": len(projects_index),
         "conversations_with_project": conversations_with_project,
+        # Sizes and category names only -- the memory text itself stays in
+        # memory_context.md. `projects` here is keyed by project uuid, which
+        # joins to projects_index above.
+        "memory": memory_summary,
+        "time_window": window_summary,
         "notes": notes,
     }
     stats_path = out_path / "stats.json"
     stats_path.write_text(json.dumps(stats, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     if stats["conversation_count"] < 10:
+        scope = (
+            " in this time window (widen it for a fuller picture)"
+            if window_summary["bounded"]
+            else ""
+        )
         stats["notes"].append(
-            "Fewer than 10 conversations in this export -- thin data means low-confidence "
+            f"Fewer than 10 conversations{scope} -- thin data means low-confidence "
             "recommendations, not no output. Say so plainly before presenting either analysis."
         )
 
