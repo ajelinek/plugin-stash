@@ -1,0 +1,12 @@
+{
+  "name": "meeting-recap",
+  "version": "0.1.0",
+  "description": "Turns a meeting transcript into a short, skimmable recap: decisions, action items (owner + due date), topics, and open questions, readable in under a minute. Takes a pasted transcript, a file, or a VTT/SRT/Otter/Zoom/Teams export -- and when a Microsoft 365 connector is available, finds the meeting on your calendar and pulls its Teams transcript, meeting chat, shared files, and related email itself. Distinguishes real decisions from discussion, never fabricates names or deadlines, tags anything sourced outside the transcript, and scales structure to meeting length from a 10-minute standup to a multi-day offsite.",
+  "author": {
+    "name": "ajelinek"
+  },
+  "homepage": "https://github.com/ajelinek/shadetree-ai-plugins",
+  "repository": "https://github.com/ajelinek/shadetree-ai-plugins",
+  "license": "MIT",
+  "keywords": ["meeting", "recap", "transcript", "minutes", "action-items", "teams", "microsoft-365", "shadetree-ai-plugins"]
+}

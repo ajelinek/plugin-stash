@@ -12,6 +12,7 @@ members = ["packages/*", "plugins/*"]
 exclude = [                         # skills-only plugins, one line each
     "plugins/grilling",
     "plugins/handoff",
+    "plugins/meeting-recap",
 ]
 
 [dependency-groups]

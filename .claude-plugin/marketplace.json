@@ -30,6 +30,11 @@
       "name": "handoff",
       "source": "./plugins/handoff",
       "description": "Compacts the current conversation into a portable handoff document a fresh agent can pick up: writes it to the OS temp directory with a timestamped name, references specs and diffs by path instead of copying them, redacts secrets, and names the skills the next agent should reach for. Also lists the handoffs on disk and resumes one straight back into the work. Based on Matt Pocock's handoff skill."
+    },
+    {
+      "name": "meeting-recap",
+      "source": "./plugins/meeting-recap",
+      "description": "Turns a meeting transcript into a short, skimmable recap: decisions, action items (owner + due date), topics, and open questions, readable in under a minute. Takes a pasted transcript, a file, or a VTT/SRT/Otter/Zoom/Teams export — and when a Microsoft 365 connector is available, finds the meeting on your calendar and pulls its Teams transcript, meeting chat, shared files, and related email itself. Distinguishes real decisions from discussion, never fabricates names or deadlines, tags anything sourced outside the transcript, and scales structure to meeting length from a 10-minute standup to a multi-day offsite."
     }
   ]
 }
