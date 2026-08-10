@@ -140,7 +140,7 @@ plugins/<name>/
   skills/<skill>/SKILL.md      # the substance of the plugin
   skills/<skill>/references/   # optional progressive-disclosure detail
   scripts/<thing>.py           # optional bundled script — stdlib only
-  commands/<command>.md        # optional slash commands
+  commands/<command>.md        # legacy flat-file commands; prefer skills/
   tests/test_<thing>.py        # only if there's a script to test
   README.md
   CHANGELOG.md
@@ -183,13 +183,25 @@ markdown: it's expanded only inside `.mcp.json` and `hooks/hooks.json`,
 and isn't exported into Bash-tool environments (confirmed absent from a
 running session's env; no official plugin uses it outside config files).
 
-## Commands (`commands/<command>.md`)
+## Commands — a skill *is* a command
 
-One markdown file per command; `commands/<command>.md` becomes
-`/<command>`. Frontmatter takes `description` (shown in the command
-list) and optionally `allowed-tools`; the body is the prompt that runs.
-If a skill's docs promise a `/something`, it needs a file here — prose
-describing a slash command doesn't create one.
+**Ship slash commands as skills, not `commands/` files.** Custom commands
+have been merged into skills: a plugin skill is invocable as
+`/<plugin>:<skill>`, and as bare `/<skill>` unless something else already
+claims that name. `commands/<command>.md` still works — it's the older
+flat-file form, one markdown file per command — but the current docs say
+to use `skills/` for new plugins, so reach for `commands/` only when a
+command genuinely has nothing to bundle and you want the flat file.
+
+What still holds either way: if a skill's docs promise a `/something`,
+something has to register it — prose describing a slash command doesn't
+create one. A skill with subcommands (`/handoff resume latest`) parses
+them out of `$ARGUMENTS` itself; the harness only dispatches on the
+skill name.
+
+Useful frontmatter for a command-shaped skill: `disable-model-invocation:
+true` so only the user fires it (which also keeps its description out of
+context until invoked), and `argument-hint` for autocomplete.
 
 ## Registering a new plugin
 

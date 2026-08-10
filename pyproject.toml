@@ -9,7 +9,10 @@ package = false
 
 [tool.uv.workspace]
 members = ["packages/*", "plugins/*"]
-exclude = ["plugins/grilling"]      # skills-only plugins, one line each
+exclude = [                         # skills-only plugins, one line each
+    "plugins/grilling",
+    "plugins/handoff",
+]
 
 [dependency-groups]
 dev = [

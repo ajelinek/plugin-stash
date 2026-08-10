@@ -25,6 +25,11 @@
       "name": "grilling",
       "source": "./plugins/grilling",
       "description": "Stress-tests a plan, decision, or idea by interviewing you relentlessly: walks the decision tree one question at a time through the structured question tool, leads every question with a recommended answer, looks up anything discoverable instead of asking, and withholds any action until you confirm shared understanding. Based on Matt Pocock's grill-me skill."
+    },
+    {
+      "name": "handoff",
+      "source": "./plugins/handoff",
+      "description": "Compacts the current conversation into a portable handoff document a fresh agent can pick up: writes it to the OS temp directory with a timestamped name, references specs and diffs by path instead of copying them, redacts secrets, and names the skills the next agent should reach for. Also lists the handoffs on disk and resumes one straight back into the work. Based on Matt Pocock's handoff skill."
     }
   ]
 }

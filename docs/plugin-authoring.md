@@ -184,7 +184,7 @@ checkouts.
 | Skill | Shape |
 |---|---|
 | ~~`grilling`~~ | skills-only — **done**, `plugins/grilling` |
-| `handoff` | skills-only + `commands/` |
+| ~~`handoff`~~ | skills-only — **done**, `plugins/handoff` |
 | `meeting-recap` | skills-only + bundled script |
 | `email-domain-reputation` | server-backed (API key → keychain) |
 | `audiobook-creator` | server-backed (long-running synthesis) |

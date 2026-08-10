@@ -1,0 +1,12 @@
+{
+  "name": "handoff",
+  "version": "0.1.0",
+  "description": "Compacts the current conversation into a portable handoff document a fresh agent can pick up: writes it to the OS temp directory with a timestamped name, references specs and diffs by path instead of copying them, redacts secrets, and names the skills the next agent should reach for. Also lists the handoffs on disk and resumes one straight back into the work. Based on Matt Pocock's handoff skill.",
+  "author": {
+    "name": "ajelinek"
+  },
+  "homepage": "https://github.com/ajelinek/shadetree-ai-plugins",
+  "repository": "https://github.com/ajelinek/shadetree-ai-plugins",
+  "license": "MIT",
+  "keywords": ["handoff", "session", "context", "continuity", "compaction", "shadetree-ai-plugins"]
+}
