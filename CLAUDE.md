@@ -10,7 +10,8 @@ into its isolated plugin cache.
 
 There's no scaffolding script or template directory: generate new
 plugins from the patterns below, copying an existing one
-(`plugins/iphone` or `plugins/career-navigator` for server-backed).
+(`plugins/iphone` or `plugins/career-navigator` for server-backed,
+`plugins/grilling` for skills-only).
 
 **`docs/plugin-authoring.md`** holds the step-by-step procedures —
 lockfile generation, `packages/common` vendoring, the `uv`-missing hook,

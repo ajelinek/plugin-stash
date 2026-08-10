@@ -183,7 +183,7 @@ checkouts.
 
 | Skill | Shape |
 |---|---|
-| `grilling` | skills-only |
+| ~~`grilling`~~ | skills-only — **done**, `plugins/grilling` |
 | `handoff` | skills-only + `commands/` |
 | `meeting-recap` | skills-only + bundled script |
 | `email-domain-reputation` | server-backed (API key → keychain) |

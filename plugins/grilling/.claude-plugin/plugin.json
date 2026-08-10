@@ -1,0 +1,12 @@
+{
+  "name": "grilling",
+  "version": "0.1.0",
+  "description": "Stress-tests a plan, decision, or idea by interviewing you relentlessly: walks the decision tree one question at a time through the structured question tool, leads every question with a recommended answer, looks up anything discoverable instead of asking, and withholds any action until you confirm shared understanding. Based on Matt Pocock's grill-me skill.",
+  "author": {
+    "name": "ajelinek"
+  },
+  "homepage": "https://github.com/ajelinek/shadetree-ai-plugins",
+  "repository": "https://github.com/ajelinek/shadetree-ai-plugins",
+  "license": "MIT",
+  "keywords": ["grilling", "decision-making", "planning", "interview", "stress-test", "shadetree-ai-plugins"]
+}
