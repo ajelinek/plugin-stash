@@ -2,7 +2,12 @@
 name = "shadetree-ai-plugins"
 version = "0.0.0"
 description = "uv workspace root + Claude Code/Desktop/Cowork plugin marketplace for shadetree-ai-plugins solutions."
-requires-python = ">=3.12"
+# The <3.14 ceiling is inherited, not chosen: plugins/audiobook-creator depends
+# on kokoro-onnx, which declares `<3.14,>=3.10`. A workspace lock resolves to
+# the intersection of its members, so the cap lands here whether or not it's
+# written down — stating it explicitly keeps `uv lock` from producing a
+# surprising repo-wide diff. Lift it when kokoro-onnx supports 3.14.
+requires-python = ">=3.12,<3.14"
 
 [tool.uv]
 package = false

@@ -9,12 +9,12 @@
     {
       "name": "iphone",
       "source": "./plugins/iphone",
-      "description": "Read (and send) iMessage history, read Mac/iPhone call history (cellular + FaceTime), and look up Contacts \u2014 all locally on this Mac. macOS only; requires Full Disk Access."
+      "description": "Read (and send) iMessage history, read Mac/iPhone call history (cellular + FaceTime), and look up Contacts — all locally on this Mac. macOS only; requires Full Disk Access."
     },
     {
       "name": "career-navigator",
       "source": "./plugins/career-navigator",
-      "description": "Conversational career exploration for a high school student: infers a RIASEC (Holland Code) profile through natural conversation, then matches it against a local O*NET occupational dataset. Fully local \u2014 no accounts, no hosting, no network calls at runtime."
+      "description": "Conversational career exploration for a high school student: infers a RIASEC (Holland Code) profile through natural conversation, then matches it against a local O*NET occupational dataset. Fully local — no accounts, no hosting, no network calls at runtime."
     },
     {
       "name": "claude-usage-analyzer",
@@ -34,7 +34,12 @@
     {
       "name": "meeting-recap",
       "source": "./plugins/meeting-recap",
-      "description": "Turns a meeting transcript into a short, skimmable recap: decisions, action items (owner + due date), topics, and open questions, readable in under a minute. Takes a pasted transcript, a file, or a VTT/SRT/Otter/Zoom/Teams export — and when a Microsoft 365 connector is available, finds the meeting on your calendar and pulls its Teams transcript, meeting chat, shared files, and related email itself. Distinguishes real decisions from discussion, never fabricates names or deadlines, tags anything sourced outside the transcript, and scales structure to meeting length from a 10-minute standup to a multi-day offsite."
+      "description": "Turns a meeting transcript into a short, skimmable recap: decisions, action items (owner + due date), topics, and open questions, readable in under a minute. Takes a pasted transcript, a file, or a VTT/SRT/Otter/Zoom/Teams export — and when a Microsoft 365 connector is available, finds the meeting on your calendar and pulls its Teams transcript, meeting chat, shared files, and related email itself. Collects the links and images shared in the call — including those pasted in chat — into their own lookup tables, opening the images it can reach and describing what they actually show. Distinguishes real decisions from discussion, never fabricates names or deadlines, never describes an image it couldn't open, tags anything sourced outside the transcript, and scales structure to meeting length from a 10-minute standup to a multi-day offsite."
+    },
+    {
+      "name": "audiobook-creator",
+      "source": "./plugins/audiobook-creator",
+      "description": "Turns a document's markdown text into a real, chaptered .m4b audiobook using local, offline neural TTS (Kokoro-82M) — no cloud API, no per-use cost, no text leaving the machine. Plain narration reads verbatim in one voice; Story mode rewrites dry source material into a themed narrative (noir, true-crime podcast, kids' bedtime story) with automatic narrator/character voice assignment. Chapter markers are embedded via FFMETADATA1, so it gets real chapter navigation, resume position, and speed controls in Apple Books, Podcasts, and Overcast. Synthesis runs as a polled background job. Requires ffmpeg on PATH; the ~120MB model downloads once on first use and is cached locally forever after."
     }
   ]
 }

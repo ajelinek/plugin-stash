@@ -76,6 +76,23 @@ happened and whether anything is owed to them.>
 ## Open Questions
 - <what's unresolved> -- <who's expected to weigh in, if known>
 (If none: "No open questions.")
+
+## Shared Links
+| Link | What it is | Shared by |
+|---|---|---|
+| <url> | <short phrase from what was said, or "(purpose not stated)"> | <name or "--"> |
+(Omit the whole section when no links were shared -- this is the one section
+with no "None" line, since absence of links isn't a finding the way "no
+decisions were made" is. Tag a chat-shared link's row `[chat]`.)
+
+## Shared Images
+| Image | What it shows | Shared by |
+|---|---|---|
+| [<filename or short label>](<url or path>) | <short phrase from the image itself + why it came up> | <name or "--"> |
+| <filename, unlinked> | <what was said about it> _(image not available -- referenced by filename only)_ | <name or "--"> |
+(Same omit-when-empty and `[chat]` rules. Add one line below the table when
+`stats.image_mentions_without_reference` is non-empty: "<N> more image(s) were
+shared in the chat but aren't captured in the transcript.")
 ```
 
 ### Hard rules, and the reasoning behind each
@@ -85,7 +102,7 @@ happened and whether anything is owed to them.>
   more than that.
 - **Every bullet is one or two sentences, never a paragraph.** If a point
   needs more room than that to make sense, it belongs in expanded notes
-  (Step 4 of SKILL.md), offered on request -- not stretched into the default
+  (Step 5 of SKILL.md), offered on request -- not stretched into the default
   recap.
 - **A section with nothing in it still gets a one-line "None," not
   silence.** Test this by asking: could the user tell the difference
@@ -102,6 +119,22 @@ happened and whether anything is owed to them.>
 - **Don't restate a decision's mechanism in the TL;DR if it's spelled out
   in a Decision bullet below** -- name the outcome, the reader gets detail
   one paragraph down.
+- **Shared Links and Shared Images go last, and their rows don't count
+  toward the word budget.** They're lookup material, not something a busy
+  reader has to get through -- the same exemption Decisions and Action Items
+  get, for the same reason (suppressing a real artifact to hit a length
+  target helps nobody). The exemption covers the *rows*, not the
+  annotations: one short phrase each, or the section quietly becomes the
+  longest thing on the page. This bites harder for images than for links --
+  having actually looked at a screenshot, there's always more to say about
+  it than belongs here; the detail goes in the Decision or Topic bullet it
+  matters to, or into expanded notes on request. At **Micro** tier skip both
+  tables entirely -- if a link or an image mattered in a 10-minute meeting,
+  it belongs inline in the bullet that references it.
+- **An image reference is always shown, whether or not it could be opened.**
+  The point of the section is that the reader can go look; a row dropped
+  because the fetch failed just hides the artifact's existence. Link the ones
+  you can, leave the others as plain text with the "not available" marker.
 
 ### Source tags
 
@@ -206,6 +239,38 @@ nobody in the room necessarily heard it. What the recap must *not* say is
 that Marcus was replying to Carol: his message lands near hers in the merged
 timeline, and that proximity proves nothing.
 
+### A worked example: the Shared Images section
+
+From a 35-minute design review whose `stats.shared_images` held three
+references -- an `<img>` posted in the Teams chat, a markdown-embedded chart,
+and a bare filename -- plus one `image_mentions_without_reference` entry:
+
+```markdown
+## Shared Images
+| Image | What it shows | Shared by |
+|---|---|---|
+| [checkout-v3.png](https://acme.sharepoint.com/.../checkout-v3.png) | Mobile checkout with the CTA below the fold -- the problem under discussion [chat] | Dev |
+| [Funnel drop-off](https://metrics.example.com/render/8ac21f) | Step-two drop-off at 40%, the evidence behind the decision [chat] | Marcus |
+| Screenshot 2025-03-04 at 11.02.13.png | The tablet breakpoint _(image not available -- referenced by filename only)_ | Dev |
+
+1 more image was shared in the chat but isn't captured in the transcript.
+```
+
+Four things to notice. The first two rows describe what's actually *in* the
+images (opened and looked at), not what their filenames say. Both carry
+`[chat]`, because that's where they were posted — same tagging rule as any
+other chat-sourced content. The third describes only what was said about it
+and states outright that it couldn't be opened: `Screenshot 2025-03-04...`
+names a time, not a subject, and guessing from it would be the pixel
+equivalent of inventing an owner. And the trailing line accounts for the
+"I dropped a screenshot in the chat" remark without pretending to know what
+was in it.
+
+Note the first URL is a tenant SharePoint host — reachable-looking, but
+org-internal. Opening it is the kind of fetch to ask about first, per
+"Before opening a remote image" in
+[extraction-rules.md](extraction-rules.md).
+
 ## Hierarchical recaps (Half-day / Full-day / Multi-day)
 
 Once a meeting has real internal structure -- distinct sessions separated
@@ -244,6 +309,22 @@ transcript, so check later sessions/days before finalizing this list.)
 
 ## Open Questions
 - <what's unresolved> -- <who's expected to weigh in>
+
+## Shared Links
+| Link | What it is | Shared by | From |
+|---|---|---|---|
+| <url> | <short phrase from what was said> | <name or "--"> | <session/day> |
+(Consolidated across the whole event and deduplicated -- the same doc linked
+on day 1 and day 3 is one row listing both, not two rows. Per-session detail
+sections don't repeat their own links.)
+
+## Shared Images
+| Image | What it shows | Shared by | From |
+|---|---|---|---|
+| [<filename or short label>](<url or path>) | <short phrase> | <name or "--"> | <session/day> |
+(Consolidated and deduplicated the same way. A revised version of the same
+image shared on a later day is a *new* row, not a duplicate -- what changed
+between them is usually the point.)
 
 ---
 
@@ -315,4 +396,4 @@ If the user wants more after seeing the recap -- the full blow-by-blow, a
 specific topic or session expanded, verbatim quotes for a contested point
 -- go back to the source transcript and pull exactly that, rather than
 having generated it up front on the chance it might be wanted. See SKILL.md
-Step 4.
+Step 5.

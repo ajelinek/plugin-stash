@@ -12,9 +12,13 @@ description: >
   decide in the Teams call with the vendor") -- with a Microsoft 365
   connector available it finds the meeting on the calendar and pulls the
   Teams transcript, meeting chat, shared files, and related email itself.
+  Collects the links and images shared during the call -- including those
+  pasted in the meeting chat -- into their own lookup tables, opening the
+  images it can reach and describing what they actually show.
   Distinguishes real decisions from mere discussion, never fabricates
   names/owners/deadlines (flags UNASSIGNED/TBD/"unclear" instead of
-  guessing), tags anything sourced outside the transcript, and scales
+  guessing), never describes an image it couldn't open, tags anything
+  sourced outside the transcript, and scales
   structure to meeting length via a sliding ruler -- same rigor from a
   10-minute standup to a multi-day offsite, no rigid template. Not for
   behavioral coaching feedback (filler words, speaking-time balance) --
@@ -109,16 +113,59 @@ Check `stats` before doing anything else:
   information. In neither case may the recap assert that a chat message was
   responding to a particular remark. `chat_senders` lists who typed, kept
   separate from `speakers` (who talked).
+- **`shared_links`** -- every URL that made it into the transcript or chat as
+  text, with who shared it, when, its `source` (`transcript`/`chat`), and the
+  words said around it. See "Links shared in the meeting" in
+  [references/extraction-rules.md](references/extraction-rules.md) for which
+  ones earn a row and the rules on opening them (short version: don't, by
+  default).
+- **`shared_images`** -- every image reference (an image URL, markdown/HTML
+  image syntax, or an attachment line naming a file), with the same
+  provenance fields plus a `retrieval` field saying whether it can actually
+  be opened. **`image_mentions_without_reference`** separately catches "I
+  dropped a screenshot in the chat" with no file to go with it. These drive
+  Step 2.
 - **Every statistic above is computed from transcript segments only** --
   chat can't stretch `duration_sec`, inflate `word_count`, invent a session
   break, or bump the tier. That's enforced in the parser, so trust it: a
   meeting where fifty links got pasted is not thereby a longer meeting.
+  Shared links and images are the deliberate exception: they're collected
+  from chat too, because that's where people actually paste them. They're
+  artifacts to look up, not measurements, so they can't move a tier.
 - If `format_detected` looks wrong given what you can actually see in the
   raw text, the parser is a heuristic and can miss unusual export formats --
   fall back to reading the raw transcript directly rather than trusting a
   bad parse.
 
-## Step 2: Extract
+## Step 2: Look at the images that were shared
+
+Unlike links, images are opened by default -- a filename like
+`checkout-v3.png` tells the reader nothing, and a design review or bug
+report is often *about* the picture. Work through `stats.shared_images` by
+its `retrieval` field:
+
+- **`local_path`** -- read the file and describe what you see.
+- **`remote_url`** -- open it, unless the URL looks like it belongs to the
+  user's organization rather than the open web. This is the common case
+  here: a Teams-shared image lives on a tenant file host
+  (`*.sharepoint.com`, `*.slack-files.com`), and its URL can carry a
+  workspace or customer name. Ask before opening those.
+- **`name_only`** / **`inline_data`** -- you cannot open these. Describe them
+  from the transcript or chat alone and mark them as unavailable. Never infer
+  content from a filename.
+
+If an image won't open, say so and keep the description drawn from what was
+said -- a failed fetch is not license to guess. An image shared in chat
+carries `source: "chat"` and is tagged `[chat]` in the output like any other
+chat-sourced content. The full rules, including what earns a row and how to
+handle an image that contradicts what was said about it, are in "Images
+shared in the meeting" in
+[references/extraction-rules.md](references/extraction-rules.md).
+
+Skip this step entirely when `shared_image_count` is 0 and
+`image_mentions_without_reference` is empty.
+
+## Step 3: Extract
 
 Read [references/extraction-rules.md](references/extraction-rules.md) and
 apply it. In brief, it covers:
@@ -131,6 +178,9 @@ apply it. In brief, it covers:
   bucket per utterance
 - Signaling confidence explicitly on anything inferred rather than stated,
   instead of presenting a guess with the same certainty as a quote
+- Which shared links and images earn a row, describing a link from what was
+  said rather than from its URL slug, describing an image from what you
+  actually saw, and the hard line against describing one you couldn't open
 - Which sources may support which claims (transcript and chat can source an
   item; files and email are context-only), and tagging anything that didn't
   come from the transcript
@@ -142,7 +192,7 @@ apply it. In brief, it covers:
   top-level rollup, per "Multi-session and multi-day meetings"
 - A cheap final self-check against the source transcript before presenting
 
-## Step 3: Write the recap
+## Step 4: Write the recap
 
 Use the exact template(s) and the hard rules in
 [references/output-template.md](references/output-template.md) -- read it
@@ -155,7 +205,7 @@ per-session detail section instead of one long flat document. The point
 that holds at every tier: whoever stops reading after the TL;DR should
 still know what happened and what's owed to them.
 
-## Step 4: Offer next steps -- don't do them unasked
+## Step 5: Offer next steps -- don't do them unasked
 
 Stop after presenting the recap. If the user wants more, two things are
 reasonable to *offer*, not to do automatically:
@@ -163,6 +213,18 @@ reasonable to *offer*, not to do automatically:
 - **Expand a section, or give the full blow-by-blow.** Go back to the
   source transcript for exactly what's requested rather than having
   pre-generated it on the chance it might be wanted.
+- **Open the shared links and summarize what's behind them.** The recap
+  lists links with what was said about them; actually fetching them is a
+  separate, slower job the user should get to choose (and one that sends
+  their URLs to whatever's on the other end). See the fetching rules in
+  [references/extraction-rules.md](references/extraction-rules.md) for the
+  narrow case where a link is load-bearing enough to open unasked.
+- **Go deeper on a shared image.** The recap gives each image one phrase.
+  Transcribing the text in a screenshot, walking through a mockup, or
+  reading numbers off a chart is a bigger job the user should ask for --
+  and worth offering explicitly when an image was clearly load-bearing.
+  If images were referenced but couldn't be opened, this is the moment to
+  ask the user to share the files.
 - **Draft a follow-up email or message.** Draft it, show the user the exact
   text, and get explicit confirmation before sending it anywhere -- this
   skill never sends anything on its own behalf.
@@ -178,6 +240,17 @@ reasonable to *offer*, not to do automatically:
   user only has an audio/video file, get it transcribed first, then hand the
   transcript here. A meeting that was never transcribed doesn't get a recap
   reconstructed from its invitation and follow-up email.
+- **Not an image-analysis report.** Images shared in the meeting *are*
+  collected and opened (Steps 1-2), but each one earns one short phrase in a
+  lookup table -- what it shows and why it came up. A full walkthrough of a
+  mockup, OCR of a slide deck, or a design critique is a different job the
+  user can ask for afterwards (Step 5). Non-image attachments -- a PDF, a
+  spreadsheet, a deck -- are handled as context under the source-provenance
+  rules, not opened as pictures.
+- **Can only see images the transcript or chat actually references.** A
+  screenshot that lives inside the meeting platform and left no URL, path, or
+  filename behind is unreachable. The recap says one was shared and that it
+  isn't captured, rather than hunting for it or describing it from a filename.
 - **Not a research tool.** Files and email are pulled to resolve what the
   meeting referred to, not to widen its subject matter. If something appears
   only in a document or a thread and nobody raised it in the meeting, it
@@ -211,6 +284,17 @@ reasonable to *offer*, not to do automatically:
 - Session/day boundary detection (`possible_session_breaks`,
   `day_marker_hints`) is heuristic evidence, not a guarantee -- corroborate
   with the transcript's own language before restructuring around it.
+- Link and image collection only sees what survived into the transcript or
+  chat *as text*. A URL read aloud is transcribed as words ("acme dot com
+  slash pricing") and isn't detected; `likely_private_host` only flags
+  network-private hosts, not the more common auth-walled page on a public
+  domain. For images specifically: an image URL with no file extension is
+  only caught when it arrives as markdown or an `<img>` tag, and an
+  undelimited filename must not contain spaces, so a bare
+  `Screenshot 2025-03-04 at 11.02.13.png` is only found when the export
+  wraps it in brackets, parentheses, or quotes.
+  `image_mentions_without_reference` is the backstop that at least flags
+  *that* an image was shared when the reference itself is missing.
 - No cross-meeting comparison or trend-tracking; a multi-day event is
   handled as one connected rollup, not a history across separate,
   unrelated meetings over time.
@@ -243,6 +327,6 @@ reasonable to *offer*, not to do automatically:
 | File | Purpose |
 | --- | --- |
 | `references/sources.md` | Step 0 in full: the Microsoft 365 chain (calendar search → event read → transcript URI → best-effort chat match → files/email), the chat anchor, temp-file handling, and what isn't reachable |
-| `references/extraction-rules.md` | Decision-vs-discussion heuristics, action-item rules, source provenance tiers, topic clustering, confidence signaling, meeting-type adaptivity, long-transcript and multi-session/multi-day handling, the pre-presentation self-check |
+| `references/extraction-rules.md` | Decision-vs-discussion heuristics, action-item rules, source provenance tiers, topic clustering, shared-link and shared-image selection and the fetching policy, confidence signaling, meeting-type adaptivity, long-transcript and multi-session/multi-day handling, the pre-presentation self-check |
 | `references/output-template.md` | The sliding ruler, the flat and hierarchical recap templates, source tagging, the reasoning behind each rule, and worked examples |
-| `scripts/normalize_transcript.py` | Stdlib-only transcript format detection, normalization, optional chat merge with source tagging, real start/end-time duration, session/day-break detection, and tier recommendation (VTT/SRT/labeled/plain) |
+| `scripts/normalize_transcript.py` | Stdlib-only transcript format detection, normalization, optional chat merge with source tagging, real start/end-time duration, session/day-break detection, shared-link and shared-image extraction, and tier recommendation (VTT/SRT/labeled/plain) |

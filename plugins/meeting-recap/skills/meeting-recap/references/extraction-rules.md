@@ -129,10 +129,136 @@ with a table row it doesn't earn.
   line is.
 - Each topic gets 1-3 bullets, not a paragraph. If a topic genuinely needs
   more than that to make sense, it's a candidate for the expanded notes
-  offered in Step 4 of SKILL.md, not the default recap.
+  offered in Step 5 of SKILL.md, not the default recap.
 - Skip pure noise: greetings, "can everyone hear me," recording/logistics
   chatter, and scheduling-only exchanges -- unless scheduling *was* the
   point of the meeting.
+
+## Links shared in the meeting
+
+`stats.shared_links` gives you every URL that made it into the transcript
+**or the chat** as text, in first-mention order, each with `url`, `host`,
+`shared_by`, `source` (`transcript`/`chat`), `timestamp_sec`, `context` (what
+was said around it), `mention_count`, and `likely_private_host`. Most meeting
+links arrive by chat, which is exactly why the parser reads both.
+
+It only finds links that were *written* -- a URL someone read aloud ("go to
+acme dot com slash pricing") is transcribed as words and won't appear.
+
+**Which links earn a row.** A link belongs in the recap if someone might
+plausibly want to open it later -- a doc, a dashboard, a ticket, a design, a
+reference someone cited. Drop the meeting's own logistics: the join/dial-in
+URL, the calendar invite, unsubscribe and footer links auto-appended by a
+tool. Same instinct as skipping "can everyone hear me" from Topics.
+
+**Annotate from what was said, not from the URL.** Each link gets one short
+phrase saying what it is and why it came up, drawn from `context`. A URL slug
+is not a description: `/docs/q3-plan-v2-FINAL` tells you someone's
+file-naming habits, not what the document says. If neither transcript nor
+chat says what a link was for, write `(purpose not stated)` -- the same
+discipline as `UNASSIGNED` and `TBD`, for the same reason.
+
+**A chat-shared link is chat-sourced.** Tag the row `[chat]` per "Tagging
+non-transcript content" above. This matters more than it looks: a link
+someone pasted without comment carries much less meeting context than one
+that was discussed out loud.
+
+**Load-bearing links go in two places.** If a link *is* the subject of a
+decision or an action item ("ship what's in this doc by Friday"), reference
+it inline there as well as in the links table.
+
+**Fetching a link's contents: off by default.** Do not open the links just
+because they're there. Opening every URL in a meeting is slow, sends the
+user's URLs to third parties, and mostly returns login walls. Fetch only when
+the user asked you to, or when the link is load-bearing for a decision or
+action item *and* the recap would be wrong or unusable without knowing what's
+behind it. Even then, fetch the handful that meet the bar, not the table.
+
+**Before fetching anything, consider whether it's the user's to share.**
+`likely_private_host` catches only network-private hosts. It does *not* catch
+the far more common case: a perfectly public host serving auth-walled content
+-- a company Confluence or Jira, a private Google Doc, a tenant SharePoint.
+Fetching one sends that URL to an external service, and the URL alone can
+carry a project codename or a customer name. When a link looks like it
+belongs to the user's organization rather than the open web, ask first.
+
+**A fetch that fails changes nothing about the row.** If a link 404s, times
+out, or is behind a login, keep the annotation drawn from what was said and
+note that it couldn't be opened. Never fill the gap with a guess from the URL.
+
+## Images shared in the meeting
+
+`stats.shared_images` gives you every image reference in the transcript or
+chat, with `reference` (a URL, path, or bare filename), `kind`, `retrieval`,
+`reference_form`, `alt_text`, `host`/`likely_private_host` (URLs only),
+`shared_by`, `source`, `timestamp_sec`, `context`, and `mention_count`.
+`stats.image_mentions_without_reference` separately lists utterances that say
+an image was shared without naming one ("I just dropped a screenshot in the
+chat").
+
+**`retrieval` tells you whether you can actually open it** -- and it's the
+field that decides everything below:
+
+| `retrieval` | What it means | What to do |
+|---|---|---|
+| `local_path` | A path on this machine (`~/Desktop/funnel.png`) | Open it with the Read tool and describe what you see |
+| `remote_url` | An `http(s)` image URL | Open it unless it looks org-internal -- see the privacy rule below |
+| `name_only` | A filename with no path or URL | You cannot open this. Describe it from what was said only |
+| `inline_data` | A `data:` URI embedded in the message | Rare; treat as `name_only` unless trivially decodable |
+
+**Looking at images is on by default -- the opposite of the link rule.**
+This is a deliberate asymmetry, not an inconsistency. A link's *title*
+usually tells the reader what it is, so a recap can list it usefully without
+opening it; a screenshot's filename tells the reader nothing at all, and
+`checkout-v3.png` is not a description of anything. An image was also shared
+*to be looked at* -- it's frequently the actual content of a design review or
+a bug report, where the words around it ("see, right there") are meaningless
+without it.
+
+**Which images earn a row.** Same instinct as links: an image belongs in the
+recap if someone might plausibly want to see it again -- a mockup, a
+dashboard, a screenshot of a bug, a whiteboard photo, a chart. Drop the
+furniture: avatars, emoji and reaction images, logos in an export's header,
+tool-appended footer graphics. Teams chat exports are full of these.
+
+**Describe from the image plus what was said, and keep it to one phrase.**
+The annotation says what the image *shows* and why it came up -- what you
+actually saw, sharpened by `context`. One short phrase, same budget as a link
+annotation. `alt_text` is a starting hint only; it's often autogenerated and
+wrong, so prefer what you can see over what the tag claims.
+
+**Never describe an image you didn't open.** For a `name_only` reference,
+write what was said about it and mark it plainly -- `(image not available --
+referenced by filename only)`. A filename is not evidence of content:
+`final-approved-layout.png` does not license you to say the layout was
+approved. This is the `UNASSIGNED`/`TBD` discipline applied to pixels. Same
+for `image_mentions_without_reference`: worth one line noting something
+visual was shared and isn't captured, so the reader knows to go ask -- never
+worth a guess at what it showed.
+
+**Before opening a remote image, consider whether it's the user's to share.**
+This bites harder here than for links: a Teams-shared image lives on a tenant
+file host (`*.sharepoint.com`, `*.slack-files.com`), and the URL routinely
+carries a workspace or customer name. `likely_private_host` won't flag any of
+those -- they're public hosts serving auth-walled content. When a URL looks
+like it belongs to the user's organization, ask before opening it. Local
+paths raise none of this: they're already the user's own files.
+
+**An image that's load-bearing goes in two places.** If an image *is* the
+subject of a decision, a topic bullet, or an action item ("this is the layout
+we're shipping"), fold what it shows into that bullet as well as listing it
+in the Shared Images table.
+
+**When the image contradicts what was said, that's a finding.** If someone
+says "the CTA is above the fold" and the screenshot plainly shows it below,
+say so in one line rather than silently picking one. That contradiction is
+often the most useful thing in the recap, and it's the whole reason to look
+at the images at all.
+
+**A failed open changes nothing about the row.** If an image 404s, is behind
+a login, or isn't where the path says it is, keep the description drawn from
+what was said and note it couldn't be opened. Never fill the gap from the
+filename.
 
 ## Redundancy check
 
@@ -298,8 +424,9 @@ is for.
 Re-read your drafted Decisions and Action Items once against the source
 transcript before showing them to the user. You're checking specifically
 for: a name that doesn't actually appear in the transcript, a decision that
-was actually just a suggestion, and a due date you inferred rather than one
-that was stated. This is a cheap single pass, not a second full analysis --
+was actually just a suggestion, a due date you inferred rather than one that
+was stated, and an image description written from a filename rather than from
+an image you actually opened. This is a cheap single pass, not a second full analysis --
 its only job is to catch the specific fabrication risks above before they
 reach the user.
 

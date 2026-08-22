@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.2.0 -- 2026-08-10
+
+Shared links and images are now collected, and images are actually looked at.
+Ported from the `skills-stash` skill of the same name and adapted to this
+plugin's chat merging and source provenance.
+
+- **Shared links** (`stats.shared_links`) — every URL that reached the
+  transcript or chat as text, with who shared it, what was said around it,
+  `mention_count`, and a `likely_private_host` flag. Listed in a Shared Links
+  table; **not** fetched by default, since opening every URL is slow, sends
+  the user's links to third parties, and mostly returns login walls.
+- **Shared images** (`stats.shared_images`) — image URLs, markdown/HTML image
+  syntax, and attachment lines naming a file. Unlike links, these *are*
+  opened by default and described by what they show: `checkout-v3.png` tells
+  a reader nothing, and a design review is usually about the picture.
+- **A `retrieval` field decides what's possible per image** — `local_path`
+  (read it), `remote_url` (open it unless it looks org-internal), or
+  `name_only` (a filename with no path or URL, which cannot be opened). An
+  image that can't be opened still gets a row, marked unavailable and
+  described only from what was said. `final-approved-layout.png` is not
+  evidence that anything was approved — the same discipline as
+  `UNASSIGNED`/`TBD`, applied to pixels.
+- **Both are collected from chat as well as the transcript**, because that's
+  where links and screenshots actually get pasted, and each entry carries the
+  `source` of its segment so a chat-shared artifact stays `[chat]`-tagged.
+  This does not breach the stats-purity rule: links and images are artifacts
+  to look up, not measurements, so they still can't stretch a duration or
+  bump a recap tier. Covered by tests both ways.
+- **`image_mentions_without_reference`** — "I just dropped a screenshot in
+  the chat" with no file attached. Weak evidence kept separate from real
+  references, so the recap can say something visual was shared and isn't
+  captured without ever describing an image nobody can see.
+
+Fixed while porting, and the reason images work in Teams at all:
+
+- **`_flatten_chat_text` was destroying the artifacts before extraction.**
+  Teams chat bodies are HTML, and the tag strip ran over the whole message —
+  so `<img src=...>` (the normal way an image reaches a meeting chat) and
+  `<a href=...>` (a hyperlinked URL) were deleted outright. The loss was
+  invisible: the message still read fine with the artifact gone. Images and
+  anchors are now rewritten to their plain-text equivalents *before* the
+  generic strip, with an autolinked bare URL (`<a href="U">U</a>`) collapsing
+  to one mention rather than "U (U)".
+
 ## 0.1.0 -- 2026-08-09
 
 Initial creation as a plugin, migrated from the `skills-stash` skill of the

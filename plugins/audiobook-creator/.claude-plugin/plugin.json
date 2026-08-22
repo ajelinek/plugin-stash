@@ -1,0 +1,12 @@
+{
+  "name": "audiobook-creator",
+  "version": "0.1.1",
+  "description": "Turns a document's text into a real, chaptered .m4b audiobook using local, offline neural TTS (Kokoro-82M) — no cloud API, no per-use cost, no text ever leaving the machine. Two modes: Plain narration (verbatim, one voice) and Story mode (rewrites dry source material into a themed narrative with narrator/character multi-voice assignment). Output is a single .m4b with FFMETADATA1 chapter markers, so it gets real chapter navigation, resume position, and speed controls in Apple Books, Podcasts, and Overcast. Synthesis runs as a background job with polling, since a book-length document takes minutes. Requires ffmpeg on PATH; the ~120MB Kokoro model downloads once on first use and is cached locally forever after.",
+  "author": {
+    "name": "ajelinek"
+  },
+  "homepage": "https://github.com/ajelinek/shadetree-ai-plugins",
+  "repository": "https://github.com/ajelinek/shadetree-ai-plugins",
+  "license": "MIT",
+  "keywords": ["audiobook-creator", "audiobook", "m4b", "tts", "text-to-speech", "kokoro", "narration", "fastmcp", "shadetree-ai-plugins"]
+}

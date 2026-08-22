@@ -1,0 +1,20 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/check_uv.py"]
+          },
+          {
+            "type": "command",
+            "command": "py",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/check_uv.py"]
+          }
+        ]
+      }
+    ]
+  }
+}

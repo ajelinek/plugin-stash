@@ -1,0 +1,16 @@
+{
+  "source": {
+    "type": "filesystem",
+    "path": "src/shadetree_ai_plugins_audiobook_creator/server.py",
+    "entrypoint": "mcp"
+  },
+  "environment": {
+    "type": "uv",
+    "python": ">=3.12,<3.14",
+    "project": "."
+  },
+  "deployment": {
+    "transport": "stdio",
+    "log_level": "INFO"
+  }
+}

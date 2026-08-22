@@ -511,5 +511,342 @@ class StatsPurityTests(unittest.TestCase):
             self.assertIn("day 2", segments[hint["segment_index"]]["text"])
 
 
+class SharedLinkExtractionTests(unittest.TestCase):
+    def _links(self, text):
+        return normalize_transcript.extract_shared_links(normalize_transcript.parse_labeled(text))
+
+    def test_captures_url_with_sharer_and_context(self):
+        links = self._links(
+            "0:30 Jane: The spec is at https://example.com/specs/q3 if anyone wants it."
+        )
+        self.assertEqual(len(links), 1)
+        self.assertEqual(links[0]["url"], "https://example.com/specs/q3")
+        self.assertEqual(links[0]["host"], "example.com")
+        self.assertEqual(links[0]["shared_by"], "Jane")
+        self.assertEqual(links[0]["source"], "transcript")
+        self.assertEqual(links[0]["timestamp_sec"], 30.0)
+        self.assertIn("if anyone wants it", links[0]["context"])
+        self.assertFalse(links[0]["likely_private_host"])
+
+    def test_strips_trailing_sentence_punctuation(self):
+        self.assertEqual(self._links("Jane: See https://example.com/plan.")[0]["url"],
+                         "https://example.com/plan")
+
+    def test_strips_wrapping_parenthesis_but_keeps_balanced_ones(self):
+        wrapped = self._links("Jane: The doc (https://example.com/plan) is ready.")
+        self.assertEqual(wrapped[0]["url"], "https://example.com/plan")
+        balanced = self._links("Jane: See https://en.wikipedia.org/wiki/Mercury_(planet) for that.")
+        self.assertEqual(balanced[0]["url"], "https://en.wikipedia.org/wiki/Mercury_(planet)")
+
+    def test_bare_www_link_gets_a_scheme(self):
+        links = self._links("Jane: Try www.example.com/pricing for the numbers.")
+        self.assertEqual(links[0]["url"], "https://www.example.com/pricing")
+
+    def test_repeat_mentions_collapse_to_first_sharer(self):
+        links = self._links(
+            "Jane: Posting https://example.com/plan now.\n"
+            "John: Looking at https://example.com/plan/ -- looks good.\n"
+        )
+        self.assertEqual(len(links), 1)
+        self.assertEqual(links[0]["mention_count"], 2)
+        self.assertEqual(links[0]["shared_by"], "Jane")
+
+    def test_case_sensitive_paths_stay_separate(self):
+        links = self._links("Jane: https://example.com/Docs/A\nJohn: https://example.com/docs/a\n")
+        self.assertEqual(len(links), 2)
+
+    def test_flags_network_private_hosts(self):
+        links = self._links(
+            "Jane: Dashboard is at http://localhost:3000/metrics\n"
+            "John: Or http://10.0.0.5/status\n"
+            "Jane: The wiki page is http://wiki/onboarding\n"
+            "John: And https://build.internal/jobs/42\n"
+        )
+        self.assertEqual(len(links), 4)
+        self.assertTrue(all(link["likely_private_host"] for link in links))
+
+    def test_public_auth_walled_host_is_not_flagged_private(self):
+        # A known limitation, pinned deliberately: likely_private_host is a
+        # network-reachability signal, not a "can I read this" signal.
+        links = self._links("Jane: Ticket is https://acme.atlassian.net/browse/ENG-4")
+        self.assertFalse(links[0]["likely_private_host"])
+
+    def test_multiple_links_in_one_utterance_are_all_captured(self):
+        links = self._links("Jane: Compare https://example.com/a and https://example.com/b please.")
+        self.assertEqual([link["url"] for link in links],
+                         ["https://example.com/a", "https://example.com/b"])
+
+    def test_context_window_truncates_a_long_utterance_around_the_link(self):
+        padding = "word " * 80
+        context = self._links(f"Jane: {padding}https://example.com/deep {padding}")[0]["context"]
+        self.assertIn("https://example.com/deep", context)
+        self.assertTrue(context.startswith("… ") and context.endswith(" …"))
+        self.assertLess(len(context), len(padding) * 2)
+
+    def test_ignores_prose_that_merely_looks_urlish(self):
+        self.assertEqual(
+            self._links("Jane: Go to acme dot com slash pricing, or search for it."), []
+        )
+
+    def test_unattributed_speaker_is_null_not_guessed(self):
+        segments = normalize_transcript.parse_plain(
+            "Someone shared https://example.com/plan on the call."
+        )
+        self.assertIsNone(normalize_transcript.extract_shared_links(segments)[0]["shared_by"])
+
+    def test_stats_expose_links_and_count(self):
+        stats = normalize_transcript.compute_stats(
+            normalize_transcript.parse_labeled("Jane: Notes at https://example.com/notes here.")
+        )
+        self.assertEqual(stats["shared_link_count"], 1)
+        self.assertEqual(stats["shared_links"][0]["url"], "https://example.com/notes")
+
+    def test_no_links_yields_an_empty_list_not_a_missing_key(self):
+        stats = normalize_transcript.compute_stats(
+            normalize_transcript.parse_labeled(LABELED_WITH_TIMESTAMPS)
+        )
+        self.assertEqual(stats["shared_links"], [])
+        self.assertEqual(stats["shared_link_count"], 0)
+
+
+class SharedImageExtractionTests(unittest.TestCase):
+    def _images(self, text):
+        return normalize_transcript.extract_shared_images(normalize_transcript.parse_labeled(text))
+
+    def test_captures_image_url_with_sharer_and_context(self):
+        images = self._images(
+            "0:30 Jane: Here's the dashboard https://example.com/shots/dash.png "
+            "-- note the empty state."
+        )
+        self.assertEqual(len(images), 1)
+        self.assertEqual(images[0]["reference"], "https://example.com/shots/dash.png")
+        self.assertEqual(images[0]["kind"], "url")
+        self.assertEqual(images[0]["retrieval"], "remote_url")
+        self.assertEqual(images[0]["shared_by"], "Jane")
+        self.assertEqual(images[0]["source"], "transcript")
+        self.assertIn("note the empty state", images[0]["context"])
+
+    def test_image_url_with_query_string_is_still_an_image(self):
+        images = self._images("Jane: https://cdn.example.com/a/b.jpg?sig=abc123&w=800")
+        self.assertEqual(len(images), 1)
+        self.assertEqual(images[0]["kind"], "url")
+
+    def test_markdown_image_captures_alt_text(self):
+        images = self._images(
+            "Jane: ![Login error state](https://example.com/err.png) is what users see."
+        )
+        self.assertEqual(images[0]["reference_form"], "markdown")
+        self.assertEqual(images[0]["alt_text"], "Login error state")
+
+    def test_markdown_image_without_an_extension_is_still_detected(self):
+        images = self._images("Jane: ![the chart](https://files.example.com/render/9f2a1c)")
+        self.assertEqual(len(images), 1)
+        self.assertEqual(images[0]["alt_text"], "the chart")
+
+    def test_html_img_tag_is_detected_with_alt(self):
+        # Teams chat bodies arrive as HTML, so this is the common shape here.
+        images = self._images(
+            'Jane: <img src="https://example.com/wire.png" alt="Checkout wireframe">'
+        )
+        self.assertEqual(images[0]["reference_form"], "html")
+        self.assertEqual(images[0]["alt_text"], "Checkout wireframe")
+
+    def test_bracketed_attachment_filename_with_spaces(self):
+        images = self._images("Jane: [Screenshot 2025-03-04 at 11.02.13.png]")
+        self.assertEqual(images[0]["reference"], "Screenshot 2025-03-04 at 11.02.13.png")
+        self.assertEqual(images[0]["retrieval"], "name_only")
+
+    def test_bare_filename_is_name_only_and_does_not_swallow_prose(self):
+        images = self._images("Jane: I shared the mockup.png in chat.")
+        self.assertEqual(images[0]["reference"], "mockup.png")
+        self.assertEqual(images[0]["retrieval"], "name_only")
+
+    def test_local_path_is_marked_openable(self):
+        images = self._images("Jane: It's saved at ~/Desktop/funnel-drop.png if you want it.")
+        self.assertEqual(images[0]["kind"], "path")
+        self.assertEqual(images[0]["retrieval"], "local_path")
+
+    def test_image_url_is_not_also_listed_as_a_plain_link(self):
+        text = "Jane: Spec https://example.com/spec and shot https://example.com/a.png here."
+        links = normalize_transcript.extract_shared_links(normalize_transcript.parse_labeled(text))
+        self.assertEqual([link["url"] for link in links], ["https://example.com/spec"])
+        self.assertEqual(len(self._images(text)), 1)
+
+    def test_markdown_image_url_is_not_leaked_into_links(self):
+        text = "Jane: ![shot](https://example.com/render/9f2a1c) from the run."
+        self.assertEqual(
+            normalize_transcript.extract_shared_links(normalize_transcript.parse_labeled(text)), []
+        )
+
+    def test_one_image_is_not_double_counted_by_two_patterns(self):
+        images = self._images("Jane: ![diagram](https://example.com/arch.png)")
+        self.assertEqual(len(images), 1)
+        self.assertEqual(images[0]["reference_form"], "markdown")
+
+    def test_repeat_mentions_collapse_to_first_sharer(self):
+        images = self._images(
+            "Jane: Posting https://example.com/a.png now.\n"
+            "John: That https://example.com/a.png is the one.\n"
+        )
+        self.assertEqual(len(images), 1)
+        self.assertEqual(images[0]["mention_count"], 2)
+        self.assertEqual(images[0]["shared_by"], "Jane")
+
+    def test_private_host_flag_applies_to_image_urls_too(self):
+        self.assertTrue(self._images("Jane: http://10.0.0.5/grafana/panel.png shows it.")[0]
+                        ["likely_private_host"])
+
+    def test_non_url_reference_has_no_host_flag(self):
+        images = self._images("Jane: See mockup.png")
+        self.assertIsNone(images[0]["host"])
+        self.assertIsNone(images[0]["likely_private_host"])
+
+    def test_non_image_link_is_not_collected_as_an_image(self):
+        self.assertEqual(self._images("Jane: The doc is https://example.com/docs/plan"), [])
+
+    def test_stats_expose_images_and_count(self):
+        stats = normalize_transcript.compute_stats(
+            normalize_transcript.parse_labeled("Jane: Chart https://example.com/q3.png here.")
+        )
+        self.assertEqual(stats["shared_image_count"], 1)
+        self.assertEqual(stats["shared_images"][0]["reference"], "https://example.com/q3.png")
+
+    def test_no_images_yields_an_empty_list_not_a_missing_key(self):
+        stats = normalize_transcript.compute_stats(
+            normalize_transcript.parse_labeled(LABELED_WITH_TIMESTAMPS)
+        )
+        self.assertEqual(stats["shared_images"], [])
+        self.assertEqual(stats["shared_image_count"], 0)
+        self.assertEqual(stats["image_mentions_without_reference"], [])
+
+    def test_name_only_images_raise_a_warning(self):
+        stats = normalize_transcript.compute_stats(
+            normalize_transcript.parse_labeled(
+                "Jane: See mockup.png for the layout we agreed today."
+            )
+        )
+        self.assertTrue(any("filename only" in w for w in stats["warnings"]))
+
+
+class ImageMentionDetectionTests(unittest.TestCase):
+    def _mentions(self, text):
+        return normalize_transcript.detect_image_mentions(normalize_transcript.parse_labeled(text))
+
+    def test_flags_an_unnamed_shared_screenshot(self):
+        mentions = self._mentions(
+            "0:45 Jane: I just dropped a screenshot in the chat, take a look."
+        )
+        self.assertEqual(len(mentions), 1)
+        self.assertEqual(mentions[0]["shared_by"], "Jane")
+        self.assertEqual(mentions[0]["timestamp_sec"], 45.0)
+
+    def test_utterance_with_a_real_reference_is_not_also_a_bare_mention(self):
+        self.assertEqual(
+            self._mentions("Jane: Sharing a screenshot: https://example.com/a.png"), []
+        )
+
+    def test_unrelated_prose_is_not_a_mention(self):
+        self.assertEqual(self._mentions("Jane: Let's picture the ideal outcome here."), [])
+
+    def test_mentions_raise_a_warning(self):
+        stats = normalize_transcript.compute_stats(
+            normalize_transcript.parse_labeled(
+                "Jane: I pasted a screenshot into the chat for everyone."
+            )
+        )
+        self.assertTrue(any("without naming a file or link" in w for w in stats["warnings"]))
+
+
+class SharedArtifactsFromChatTests(unittest.TestCase):
+    """Links and images are collected from chat as well as the transcript --
+    chat is where they actually get pasted -- but must stay tagged, and must
+    not leak into any statistic."""
+
+    CHAT_WITH_ARTIFACTS = json.dumps([
+        {
+            "sender": "Priya",
+            "timestamp": "2026-08-07T14:00:05Z",
+            "text": "Deck is at https://example.com/decks/q3 and the shot is "
+                    "https://example.com/shots/bug.png",
+        }
+    ])
+
+    def _stats(self, chat_text=None, anchor="2026-08-07T14:00:00Z"):
+        return normalize_transcript.normalize(
+            VTT_SAMPLE, chat_text=chat_text, chat_anchor=anchor
+        )["stats"]
+
+    def test_chat_pasted_link_is_collected_and_tagged_chat(self):
+        stats = self._stats(self.CHAT_WITH_ARTIFACTS)
+        self.assertEqual(stats["shared_link_count"], 1)
+        self.assertEqual(stats["shared_links"][0]["url"], "https://example.com/decks/q3")
+        self.assertEqual(stats["shared_links"][0]["source"], "chat")
+        self.assertEqual(stats["shared_links"][0]["shared_by"], "Priya")
+
+    def test_chat_pasted_image_is_collected_and_tagged_chat(self):
+        stats = self._stats(self.CHAT_WITH_ARTIFACTS)
+        self.assertEqual(stats["shared_image_count"], 1)
+        self.assertEqual(stats["shared_images"][0]["reference"], "https://example.com/shots/bug.png")
+        self.assertEqual(stats["shared_images"][0]["source"], "chat")
+
+    def test_chat_artifacts_do_not_touch_duration_word_count_or_tier(self):
+        baseline = normalize_transcript.normalize(VTT_SAMPLE)["stats"]
+        merged = self._stats(self.CHAT_WITH_ARTIFACTS)
+        self.assertEqual(merged["duration_sec"], baseline["duration_sec"])
+        self.assertEqual(merged["word_count"], baseline["word_count"])
+        self.assertEqual(merged["recommended_tier"]["name"], baseline["recommended_tier"]["name"])
+
+    def test_link_segment_index_points_into_the_merged_list(self):
+        result = normalize_transcript.normalize(
+            VTT_SAMPLE, chat_text=self.CHAT_WITH_ARTIFACTS, chat_anchor="2026-08-07T14:00:00Z"
+        )
+        index = result["stats"]["shared_links"][0]["segment_index"]
+        self.assertEqual(result["segments"][index]["source"], "chat")
+        self.assertIn("https://example.com/decks/q3", result["segments"][index]["text"])
+
+    def test_teams_html_image_survives_tag_stripping(self):
+        """A Teams chat body is HTML, so an inline image arrives as <img>.
+        Stripping tags wholesale would delete it invisibly -- the message
+        would still read fine while the artifact vanished."""
+        chat = json.dumps({"messages": [{
+            "createdDateTime": "2026-08-07T14:00:05Z",
+            "from": {"user": {"displayName": "Dev"}},
+            "body": {"contentType": "html",
+                     "content": '<p>current state <img src="https://acme.example.com/v3.png" '
+                                'alt="mobile checkout"></p>'},
+        }]})
+        stats = self._stats(chat)
+        self.assertEqual(stats["shared_image_count"], 1)
+        self.assertEqual(stats["shared_images"][0]["reference"], "https://acme.example.com/v3.png")
+        self.assertEqual(stats["shared_images"][0]["alt_text"], "mobile checkout")
+        self.assertEqual(stats["shared_images"][0]["source"], "chat")
+
+    def test_teams_html_hyperlink_keeps_its_url(self):
+        chat = json.dumps({"messages": [{
+            "createdDateTime": "2026-08-07T14:00:05Z",
+            "from": {"user": {"displayName": "Priya"}},
+            "body": {"contentType": "html",
+                     "content": '<p>See <a href="https://example.com/spec">the spec</a></p>'},
+        }]})
+        stats = self._stats(chat)
+        self.assertEqual(stats["shared_link_count"], 1)
+        self.assertEqual(stats["shared_links"][0]["url"], "https://example.com/spec")
+        self.assertIn("the spec", stats["shared_links"][0]["context"])
+
+    def test_teams_autolinked_bare_url_is_not_duplicated(self):
+        # Teams renders a pasted URL as <a href="URL">URL</a>.
+        text = normalize_transcript._flatten_chat_text(
+            '<a href="https://example.com/a">https://example.com/a</a>'
+        )
+        self.assertEqual(text, "https://example.com/a")
+
+    def test_transcript_only_run_tags_everything_transcript(self):
+        stats = normalize_transcript.compute_stats(
+            normalize_transcript.parse_labeled("Jane: Deck https://example.com/d and shot a.png")
+        )
+        self.assertEqual(stats["shared_links"][0]["source"], "transcript")
+        self.assertEqual(stats["shared_images"][0]["source"], "transcript")
+
+
 if __name__ == "__main__":
     unittest.main()

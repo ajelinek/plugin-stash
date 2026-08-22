@@ -185,9 +185,9 @@ checkouts.
 |---|---|
 | ~~`grilling`~~ | skills-only — **done**, `plugins/grilling` |
 | ~~`handoff`~~ | skills-only — **done**, `plugins/handoff` |
-| `meeting-recap` | skills-only + bundled script |
+| ~~`meeting-recap`~~ | skills-only + bundled script — **done**, `plugins/meeting-recap` |
+| ~~`audiobook-creator`~~ | server-backed (long-running synthesis) — **done**, `plugins/audiobook-creator` |
 | `email-domain-reputation` | server-backed (API key → keychain) |
-| `audiobook-creator` | server-backed (long-running synthesis) |
 | `professional-writing` (from `jelinek-writing`) | server-backed (profile state) |
 | `website-health-analytics` | deferred — may not move |
 

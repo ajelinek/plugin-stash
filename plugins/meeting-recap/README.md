@@ -55,6 +55,12 @@ itself.
 - **Chat is merged into the timeline but stays labeled.** A commitment typed
   in chat is a real commitment and gets recorded — tagged `[chat]`, because
   a reader needs to know it was typed rather than said.
+- **Links and images shared in the call get their own lookup tables.**
+  Collected from the chat as well as the transcript, since that's where
+  people actually paste them. Images are *opened and described by what they
+  show* — a filename like `checkout-v3.png` tells a reader nothing — while
+  links are listed but not fetched by default. An image that couldn't be
+  opened is still listed, marked as unavailable rather than guessed at.
 - **Files and email are context-only.** They resolve what "the deck" meant;
   they can't put anything in the recap that the meeting didn't cover.
 - **Meeting length can't be gamed by chat volume.** Every statistic driving
@@ -75,18 +81,25 @@ itself.
   them is the scheduled start. Adjacency is never treated as causation.
 - **Google Meet transcripts aren't reachable** — they live in Google Drive
   and there's no Drive connector. Export the file and hand it over.
+- **Only links and images that survived as text are found.** A URL read
+  aloud is transcribed as words and missed; an image that lives inside the
+  meeting platform with no URL, path, or filename can't be opened. The recap
+  says an image was shared and isn't captured rather than describing one
+  nobody can see.
 
 ## What's inside
 
 - `.claude-plugin/plugin.json` — plugin manifest.
-- `skills/meeting-recap/SKILL.md` — the four-step flow, non-goals, and limits.
+- `skills/meeting-recap/SKILL.md` — the six-step flow, non-goals, and limits.
 - `skills/meeting-recap/references/sources.md` — the Microsoft 365 retrieval
   chain, the chat anchor, and temp-file handling.
 - `skills/meeting-recap/references/extraction-rules.md` — decision-vs-discussion
-  heuristics, action-item rules, source provenance, confidence signaling.
+  heuristics, action-item rules, source provenance, shared-link and
+  shared-image selection and fetching policy, confidence signaling.
 - `skills/meeting-recap/references/output-template.md` — the sliding ruler,
   recap templates, source tags, worked examples.
 - `skills/meeting-recap/scripts/normalize_transcript.py` — stdlib-only format
-  detection, normalization, chat merge, duration, and tier recommendation.
+  detection, normalization, chat merge, duration, shared-link and
+  shared-image extraction, and tier recommendation.
 - `tests/test_normalize_transcript.py` — parser tests, including the
   stats-purity guarantees.

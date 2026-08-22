@@ -1,0 +1,20 @@
+[project]
+name = "shadetree-ai-plugins-audiobook-creator"
+version = "0.1.0"
+description = "FastMCP server bundled with the shadetree-ai-plugins 'audiobook-creator' plugin: local Kokoro-82M TTS synthesis, chapter timestamping, and .m4b encoding, run as a polled background job."
+# Upper bound is kokoro-onnx 0.5.0's own: it has no 3.14 support yet. The
+# floor is the workspace's.
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "fastmcp>=3.4",
+    "kokoro-onnx==0.5.0",
+    "numpy>=2.0",
+    "soundfile>=0.13",
+]
+
+[build-system]
+requires = ["uv_build>=0.8.17,<0.9"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = ["shadetree_ai_plugins_audiobook_creator", "shadetree_ai_plugins_common"]
