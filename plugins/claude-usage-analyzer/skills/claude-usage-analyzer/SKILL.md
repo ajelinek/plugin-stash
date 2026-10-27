@@ -1,44 +1,35 @@
 ---
 name: claude-usage-analyzer
-description: >
-  Analyzes how the user actually uses Claude -- local Claude Desktop/Cowork
-  data on this machine, plus an optional claude.ai account data export --
-  and produces a live, self-updating HTML dashboard covering a workspace
-  reorganization (which chats belong in which Projects, each Project's
-  name/description/custom instructions, what file/folder structure it
-  needs, and what's stale vs. active), a usage & best-practices review
-  (project/chat counts, model-usage breakdown, chats that used a more
-  expensive/complex model than the task needed, prompting/context patterns,
-  and recommended public skills/plugins/connectors vs. custom ones worth
-  building), and a setup & effectiveness checkup (standing custom
-  instructions audited for bloat and duplication across the
-  global/Space/Project layers; memory content reviewed for staleness and
-  cross-topic drift; each Project graded on whether its name, description
-  and instructions match what it's actually for; which folders and hosts
-  each session can reach; and which connectors, skills and plugins are
-  installed or enabled versus actually used). Built
-  for business users of the Claude Desktop app -- Claude Code CLI sessions
-  are deliberately excluded, since Claude Code ships its own /doctor,
-  /usage, and /context for that. Uses this plugin's bundled
-  check_data_access / list_local_workspace / get_project_membership /
-  get_instructions_inventory / parse_export / render_dashboard MCP tools.
+description: >-
+  Read-only analysis of how the user actually uses Claude -- local Claude
+  Desktop/Cowork data on this machine, plus an optional claude.ai account
+  data export -- rendered as one HTML dashboard with three lenses: a
+  workspace reorganization proposal, a usage & best-practices review
+  grounded in real plan consumption, and a setup & effectiveness checkup
+  covering standing instructions, memory, access scope and
+  installed-versus-actually-used capabilities. Built for business users of
+  the Claude Desktop app -- Claude Code CLI sessions are deliberately
+  excluded, since Claude Code ships its own /doctor, /usage and /context for
+  that. Every history tool takes an optional since/until window; settings
+  are current state and take none. Analysis and dashboard generation only --
+  it never moves, renames or deletes a chat or Project.
+when_to_use: >-
   Trigger on "analyze my Claude usage/chats/projects", "organize my Claude
-  workspace", "audit my Claude usage", "reorganize my chats", "find
+  workspace", "audit/review my Claude usage", "reorganize my chats", "find
   patterns in my conversations", "how am I using Claude", "am I using the
-  right models", "how can I optimize my Claude usage", "review my custom
-  instructions", "is my Claude set up correctly", "what skills should I
-  build", "which connectors am I actually using", "review my Claude
-  memory", "what folders can Claude see", or when handed a claude.ai data
-  export folder. Analysis
-  Every data tool takes an optional since/until time window, so a run can
-  cover all history or just a period ("the last 90 days", "since January").
-  Analysis and dashboard generation only -- it never moves, renames, or
-  deletes a chat or Project itself.
+  right models", "how can I optimize my Claude usage", "am I hitting my usage
+  limits", "why do I keep running out of usage", "how much of my plan am I
+  using", "review my custom instructions", "review my Claude memory", "is my
+  Claude set up correctly", "what skills should I build", "which connectors
+  am I actually using", "what folders can Claude see", "what does Claude have
+  access to", or when handed a claude.ai data export folder.
+compatibility: "Claude Desktop and Cowork; requires uv on PATH"
+license: MIT
 ---
 
 # Claude Usage Analyzer
 
-**Skill version: 0.5.0** (matches `.claude-plugin/plugin.json`). Bump this
+**Skill version: 0.6.2** (matches `.claude-plugin/plugin.json`). Bump this
 line, in lockstep with that file's `version`, any time this skill's
 content changes -- it's the quickest way to confirm an installed copy
 has picked up the latest instructions rather than a stale cached one.
@@ -82,7 +73,8 @@ dashboard** covering three independent lenses on the same data:
    well, or is it quietly costing the user on every turn? Six areas --
    standing instructions (global / Space / Project, audited for
    duplication and derivable content), **memory** (what Claude has
-   actually remembered, and whether it has gone stale or cross-topic),
+   actually remembered -- read straight off this machine, no export
+   required -- and whether it has gone stale or cross-topic),
    **Project and Space quality** (does each have a name, description and
    instructions that match what it's for), **access scope** (which folders
    and hosts each session can reach), **capability inventory** (what's
@@ -133,11 +125,11 @@ first.
 
 ### 2a. Time window
 
-**Ask before pulling anything.** Every data tool
-(`list_local_workspace`, `get_project_membership`,
-`get_instructions_inventory`, `parse_export`) takes the same `since`/`until`
-pair, and the answer changes what every number in the dashboard means. Two
-choices to put to the user:
+**Ask before pulling anything.** Every tool that reads history --
+`list_local_workspace`, `get_project_membership`,
+`get_instructions_inventory`, `get_plan_usage_history`, `parse_export` --
+takes the same `since`/`until` pair, and the answer changes what every
+number in the dashboard means. Two choices to put to the user:
 
 - **The full flow** -- all available history. The right default for a first
   run, or for "how am I using Claude" in general.
@@ -150,12 +142,31 @@ Pass the same window to every tool in the run. Mixing an all-time chat
 count with a windowed model breakdown produces a dashboard that quietly
 contradicts itself.
 
+**Two things a window does not scope, and both need saying out loud.**
+`get_desktop_settings` takes no `since`/`until` at all -- settings are
+current state, and nothing on disk records when a toggle was flipped or a
+folder trusted. And `get_instructions_inventory`'s `memory` block is
+current state too: a memory file has one last-modified date, not a history,
+so only each owner's `session_count` is windowed. On a scoped run, say
+plainly that those parts describe the account *as it is today* while the
+rest of the report covers the chosen period -- otherwise the dashboard's
+date range implies a precision they don't have.
+
 Both bounds accept a relative age (`"90d"`, `"6m"`), an ISO date
 (`"2026-01-01"`), or epoch milliseconds. **Prefer the relative form** --
 it's resolved server-side against the real clock, so it can't be thrown off
 by an uncertain sense of today's date. Sessions and conversations are
 matched on *overlap*, not creation date: a chat begun in January and still
 being worked in March is in a March window.
+
+**A bare date is anchored at midnight UTC**, while every date the user
+reads is local -- so off UTC, the window edge lands part-way through a
+local day. The response's `time_window.boundary_notes` says so and gives
+the exact bound to pass instead (`"2026-01-01T00:00:00-05:00"`), and
+`since_local`/`until_local` show where the bounds actually fell on the
+user's clock. Pass an explicit offset when the window is meant to line up
+with their calendar, and never state a window bound as a bare date with no
+zone attached.
 
 Every response carries a `time_window` block -- the resolved bounds, how
 many records were excluded, and any errors. A bad bound widens the read and
@@ -233,12 +244,49 @@ resolved bounds across all of them, no `errors`, and an `excluded` count
 that matches what you'd expect. This is the cheapest place to catch a scope
 mistake -- after Step 7 it's baked into a dashboard the user reads as fact.
 
+**Every date and weekday you show the user is a local one.** Each instant
+comes back five ways: `<x>_iso` in UTC for comparing and joining, and
+`<x>_local_iso` / `<x>_local_date` / `<x>_local_weekday` / `<x>_utc_offset`
+on this machine's clock. Build every sentence from the local fields;
+`check_data_access`, `list_local_workspace`, `get_instructions_inventory`
+and `get_desktop_settings` each carry a `timezone` block naming the zone.
+A weekday computed in UTC is a wrong answer for someone reading their own
+calendar, not a caveat on a right one -- on the verification machine the
+account's first launch is Sunday in UTC and **Saturday** locally. The one
+exception is the `time_window` bounds themselves, which stay UTC and are
+labelled UTC.
+
 ## Step 4: Analyze (reorganization lens)
 
 See [references/reorganization.md](references/reorganization.md) for the
-full method: reconstructing chat -> Project/Space membership when the
-direct link is missing or partial, spotting topic clusters, and separating
-stale one-offs from active work worth structuring.
+full method: reading chat -> Project/Space membership, spotting topic
+clusters, and separating stale one-offs from active work worth structuring.
+
+**Claude Desktop records which Space each chat is in, and the tools read
+that record.** Membership is not reconstructed: a session's `spaceId`
+resolves through `spaces.json`, and only a chat the app recorded no Space
+for falls back to matching its folder against Space folders. Every session
+row -- in `list_local_workspace` and `get_project_membership` alike, from
+the same shared map -- says which happened:
+
+- `space_source: "app_record"` -- the user's own filing. A fact.
+- `space_source: "inferred_from_folder"` -- **this plugin's guess.**
+  `space_matched_folder` says what it matched.
+- `space_source: "none"` -- not in any Space.
+
+**Never present a guess as the user's filing.** Say "Claude has this filed
+under X" only for `app_record`; for an inferred row, say it was matched
+from the folder the chat was working in. That distinction decides how much
+confidence a reorganization proposal deserves, and where a finding leans on
+inferred rows, put it in the plan's `notes`. Quote `space_label` -- always
+readable prose, never a bare uuid -- rather than `space_id`.
+
+This matters because it was wrong until 0.6.2: the old folder-prefix
+reconstruction disagreed with the app on every chat that had a record,
+collapsing 36 chats filed under a nested Space into the broad
+cloud-storage Space above it and reporting two real Spaces as empty. An
+empty Space, or a large unfiled count, is exactly the kind of finding to
+check against `space_source` before reporting it.
 
 For each proposed Project, work out all of: **name**, **description**,
 **custom instructions** (the Project-level prompt/instructions text), which
@@ -254,11 +302,43 @@ See [references/usage-efficiency.md](references/usage-efficiency.md) for
 the full method: right-sizing **model** choice against task complexity,
 right-sizing the **effort** dial (low/medium/high/xhigh/max -- the largest
 under-examined cost/quality lever), **approval mode** (`permission_mode` --
-Auto costs *more* usage than Manual or Skip), **surface choice** (Cowork
+Auto is reported to cost more than Manual or Skip, but that is received
+guidance nothing local can verify, so never let it carry a finding alone),
+**surface choice** (Cowork
 costs significantly more than chat; simple questions belong in chat),
 context/prompting patterns worth a look, and flagging (with evidence, not
 a deep build-out) recurring manual workflows that look like automation
 candidates.
+
+**Lead with real consumption, not proxies.** `get_plan_usage_history` is
+the only ground truth this skill has about what the user's plan is actually
+being spent on: it returns the sampled five-hour and seven-day usage
+windows Desktop records, plus any extra usage. Call it whenever this lens
+runs. Everything else here -- model tier, the effort dial, approval mode,
+Cowork-versus-chat surface choice -- is a *proxy* for cost, inferred from
+how a session was configured rather than measured. So: open with what the
+real consumption history shows (how close the user gets to the limit, when,
+and how often), then use the proxies to explain *why* and what to change.
+**There are two limits and both get reported.** `get_plan_usage_history`
+analyses the five-hour window and the seven-day window in the same shape,
+under `limit_events.five_hour` and `limit_events.seven_day`. Never report
+one without the other: for a business user the weekly cap is usually the
+one that matters more, because running out of the five-hour window costs
+the rest of an afternoon while running out of the weekly one can cost the
+rest of the week.
+
+**Its dates follow the same local-time convention as everything else**
+(Step 3): quote the `*_local_date` / `*_local_weekday` values, not the UTC
+ones. It matters most here -- on the verification machine UTC bucketing
+moved the weekly usage peak from Thursday to Friday, which is a wrong
+answer to "when do I run out?", not a caveated one.
+
+If the history is unavailable or too thin to read (a new install, a short
+window), say so and fall back to the proxies. Either way, state which one
+a finding rests on -- "you hit the five-hour limit on nine days last month"
+and "these chats used a heavier model than the task needed" are different
+kinds of claim, and the user should never have to guess which they're
+being shown.
 
 Two corrections worth carrying into any advice you give here, because
 older guidance gets both wrong:
@@ -295,9 +375,9 @@ you're about to report.
 
 ## Step 6: Analyze (setup & effectiveness checkup lens)
 
-Call `get_instructions_inventory()` and see
-[references/workspace-checkup.md](references/workspace-checkup.md) for the
-full method. Six areas:
+Call `get_instructions_inventory()` **and** `get_desktop_settings()`, then
+see [references/workspace-checkup.md](references/workspace-checkup.md) for
+the full method. Six areas:
 
 1. **Standing instructions** -- the three always-loaded layers (global
    custom instructions, each Space's `instructions`, each cloud Project's
@@ -307,13 +387,21 @@ full method. Six areas:
    `/doctor`'s most valuable check and needs real reading rather than a
    count -- keep standing constraints, tone, jargon definitions and
    anything contradicting a sensible default; cut what's derivable.
-2. **Memory** -- from `parse_export`'s `stats.memory` and
-   `memory_context.md`. Stale or contradicted entries, cross-topic
-   pollution in a project's pool, duplication against standing
-   instructions, and whether memory is on at all. Memory content is
-   **export-only**. Two traps worth telling the user outright: deleting a
-   conversation does *not* delete the memory it produced, and incognito
-   chats still appear in Team/Enterprise exports.
+2. **Memory** -- what Claude has actually remembered. **This is on disk
+   and `get_instructions_inventory` returns it**, in its `memory` block:
+   account-level memory, per-Space memory, and each cached cloud Project's
+   memory, each named through the same join the instruction layers use,
+   with character counts, last-modified dates and the same
+   duplicates-against-global check. A plain local run answers "review my
+   Claude memory" with no export at all. An export's `memories.json` is
+   the complement, not the prerequisite: it comes from the account rather
+   than this device, so where the two disagree **the export wins** -- say
+   which source a finding came from. Checks: stale or contradicted
+   entries, cross-topic pollution (`repeated_across_memory`), duplication
+   against standing instructions, and whether memory is on at all. Two
+   traps worth telling the user outright: deleting a conversation does
+   *not* delete the memory it produced, and incognito chats still appear
+   in Team/Enterprise exports.
 3. **Project and Space quality** -- grade existing ones on name,
    description and instructions. Report only concrete defects, and write
    the replacement text for each; stay silent on the ones already fine.
@@ -322,13 +410,40 @@ full method. Six areas:
    `web_fetch_allowed_url_hosts`), broad grants, and scope creep
    (`touched_dirs`/`url_hosts` versus what was granted and asked for).
    Anthropic publishes this guidance; the reference doc quotes it directly.
+   Quote `access_scope.broad_grants` for the headline figure -- it is
+   deduplicated across settings and keeps standing grants apart from
+   session-scoped ones -- and never re-add the per-setting `broad_count`s
+   yourself. Each remote-session grant now names the **Space** it belongs
+   to (`space_label`); never show the user a raw `session_01...` id.
 5. **Capability inventory** -- what's installed and enabled
    (`enabled_mcp_server_labels`, `plugin_names`, `remote_mcp_server_names`)
    versus what was actually invoked (`tools_invoked`,
    `mcp_servers_invoked`). Installed-but-never-used, used-constantly, and
    needed-but-missing.
 6. **Settings hygiene** -- the per-session `memory_enabled` /
-   `skills_enabled` / `plugins_enabled` toggles.
+   `skills_enabled` / `plugins_enabled` toggles, plus the app-wide
+   preferences `get_desktop_settings` reports. Name every one of those in
+   plain language, never by its on-disk key: `keepAwakeEnabled` is a
+   string the user cannot find anywhere in the app. The reference doc
+   carries the wording to use, and says where the in-app location is
+   genuinely unknown rather than inventing a menu path.
+   `get_desktop_settings` also reports `scheduled_tasks`, read from a real
+   file on disk -- an empty list means "this device records none", which
+   is not the same as "the feature doesn't exist" or "the account has
+   none".
+
+**Areas 4, 5 and 6 need `get_desktop_settings`.** Until now those three saw
+only *per-session* data, which meant they could only describe folders,
+capabilities and toggles that some session happened to use. Anything
+standing at the account level was invisible: a folder the user granted once
+and left granted, or an extension installed and then never enabled in any
+session, simply never appeared. `get_desktop_settings` supplies that
+account-level layer -- the standing folder grants and consent memory
+(area 4), the installed extension inventory (area 5), and the app-wide
+preferences (area 6). Read the two together: the per-session data says what
+was *used*, the settings say what is *available*, and the gap between them
+is most of what's worth reporting here -- a broad standing folder grant
+nothing ever needed, an extension installed and then never switched on.
 
 Report these as `findings`; propose the edits, never make them. An honest
 "the workspace looks fine" is a good outcome here -- don't manufacture

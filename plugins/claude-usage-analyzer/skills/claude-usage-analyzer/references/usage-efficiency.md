@@ -21,6 +21,174 @@ case. And every headline number needs the window attached when presented;
 `time_window` on each tool response has the resolved bounds and the
 excluded count to quote.
 
+## Ground truth: what the plan actually consumed
+
+**Call `get_plan_usage_history` first, every time this lens runs.** It
+reads Claude Desktop's own rolling record of how full the five-hour and
+seven-day usage windows were, sampled roughly every 15 minutes while the
+app is open -- the Desktop counterpart of the Claude Code CLI's `/usage`
+(shape and caveats in
+[data-sources.md section 1c](data-sources.md#1c-account-level-files----the-account-and-the-app-not-a-session)).
+
+This is the only measurement in the whole lens. Everything else below is
+inferred:
+
+| Signal | Kind | What it can honestly say |
+|---|---|---|
+| `get_plan_usage_history` -- `peaks`, `limit_events` (both windows), `daily_high_water`, `current` | **Measured** | "You reached 100% of your five-hour window on Saturday 8 August, and were at or near that limit five times in this period; your weekly window peaked at 80% and never came close to running out." |
+| Model tier (`models_used`, `default_model`) | Proxy | "These chats ran on a heavier model than the task looked like it needed." |
+| Effort (`effort`) | Proxy | "This dial was set high across a lot of routine work." |
+| Approval mode (`permission_mode`) | Proxy, and an **unverified** one | "Auto was the standing mode across these sessions." The further claim that Auto costs more than Manual or Skip is received guidance this plugin has never verified and no local file measures -- see "Approval mode" below before building a finding on it. |
+| Surface choice (Cowork vs. chat) | Proxy | "Short, tool-free questions were being asked in the more expensive surface." |
+
+The proxies are configuration, not consumption: they describe how a session
+was *set up*, and none of them observed a single token. That is not a
+reason to drop them -- they are the only things the user can actually
+change -- but it decides the order.
+
+**The rule: lead with the measurement, use the proxies to explain it.**
+
+1. Open with what really happened. How close the user got to the limit,
+   when, and how often. That is the number a business user came for.
+2. Then reach for the proxies to answer *why*, and to name the lever.
+   "You ran out mid-afternoon four times last month" is the finding; "and
+   the sessions running at those times were Cowork sessions on the top
+   tier at high effort" is the explanation that makes it fixable.
+3. **When the history isn't available, say so.** `available: false` (no
+   file yet -- a fresh install, or a machine Claude is rarely opened on),
+   a window with no samples in it, or a span too short to read all mean
+   the same thing: fall back to the proxies, and *label the fallback*.
+4. **Never let a proxy-only finding read as if it were measured.** State
+   which kind of evidence each finding rests on, in the finding itself.
+   "You hit the five-hour limit on nine days" and "these chats used a
+   heavier model than the task needed" are different claims, and the user
+   should never have to guess which one they are being shown.
+
+An absent file is **not** evidence of low usage, and no proxy count may be
+substituted for it. "We couldn't measure consumption this run" is an honest
+and useful sentence; "you used 340 messages" presented in the space where a
+consumption number belongs is not.
+
+### Never present percentages as dollars or tokens
+
+`fh`, `sd` and `xu` are shares of the user's *own plan limits*. They are
+not money, not tokens, and not a bill. Three ways this goes wrong, all
+tempting:
+
+- **Converting to cost.** There is no price in this data, no token count,
+  and no plan tier. Any dollar figure would be invented. Don't compute one,
+  don't estimate one, and don't hedge one ("roughly $X") -- a hedged
+  fabrication is still a fabrication.
+- **Adding percentages up.** "80% on Monday plus 60% on Tuesday" is not
+  140% of anything. Each sample is a snapshot of a rolling window's
+  fullness; they don't sum, and the five-hour and seven-day figures overlap
+  by construction. Report peaks and counts of events, never totals.
+- **Calling a percentage "usage".** Say what it is: how full a limit
+  window got. "You reached 100% of your five-hour limit" is plain and
+  correct. "You used 100%" invites the reader to hear "of my money."
+
+The one honest translation into the user's terms is *consequence*: at 100%
+of the five-hour window, Claude stops until the window rolls. That is what
+they feel, and it needs no arithmetic.
+
+### Two limits, and the weekly one usually matters more
+
+`limit_events` has two sub-blocks with identical shapes: **`five_hour`**
+and **`seven_day`**. Report both, always. Until 0.6.1 only the five-hour
+window was analysed at all, which left the cap that can strand a user for
+days entirely invisible -- no event, no peak framing, no advice.
+
+The reason to lead with the weekly one when it is the more loaded of the
+two is the consequence, in the user's terms: **running out of the five-hour
+window costs the rest of an afternoon; running out of the weekly window can
+cost the rest of the week.** A user at 95% of their seven-day cap on a
+Tuesday has a scheduling problem for the next five days, and no amount of
+waiting an hour fixes it. If the seven-day event count is the higher one,
+open with it.
+
+One asymmetry to quote correctly if you describe the events themselves:
+the two windows use different run-break thresholds, and each block reports
+its own `run_break_hours` -- **2 hours** for the five-hour window, **36**
+for the seven-day one. Five hours of quiet empties the five-hour window, so
+a two-hour hole in the samples really is two separate events; the seven-day
+window drains at about 14% a day, so 95% on Monday night and 95% on Tuesday
+morning is one continuous week of being nearly out. Don't describe the
+seven-day break as an error.
+
+### Turning limit events into something a business user can act on
+
+`limit_events` is already de-noised for you: contiguous at-or-near-limit
+samples (>= 90%) collapse into a single event with a start, an end, a
+duration and a peak, and `hit_ceiling` separates "you ran out" from "you
+got close." One busy afternoon is one event, not twenty limit hits. Report
+events, never raw samples.
+
+A useful finding answers four questions in order:
+
+1. **When.** Dates and times of day, from the events themselves, plus the
+   weekday pattern from `daily_high_water` if one is real across several
+   weeks. Two Mondays is a coincidence; six is a rhythm. **Days and
+   weekdays are already in this machine's local timezone** -- use them as
+   they come, and build every sentence the user reads from the
+   `*_local_iso` / `*_local_date` / `weekday` fields rather than the
+   `*_at_iso` (UTC) ones sitting beside them. This is the reverse of the
+   instruction that used to be here: `daily_high_water` bucketed by UTC day
+   until 0.6.1, and the note telling you to "convert deliberately" was
+   asking a business user to do offset arithmetic on their own calendar. On
+   the verification machine that bug moved the weekly peak from Thursday to
+   Friday and mislabelled 22 of ~30 days. The `timezone` block names the
+   zone; each daily row carries its own `utc_offset`, so a run spanning a
+   daylight-saving change is still right on both sides of it.
+2. **What was running.** Cross the event's start/end timestamps against
+   `list_local_workspace` sessions active in that interval
+   (`created_at`/`last_activity_at`) and look at what they were: the
+   surface, the model, the effort, the message count, how agentic they
+   were. Name the work in the user's own language -- "the Tuesday
+   afternoon contract-review sessions", not session uuids.
+3. **Which lever.** One concrete change, tied to what you found: move the
+   short lookup work out of Cowork, drop effort on the recurring routine
+   pass, batch the four separate chats into one session, or move a heavy
+   recurring job to a time when the window is empty. If the sessions in
+   the window were genuinely the important work, say *that* -- the honest
+   answer is sometimes "you hit the limit doing exactly what you should
+   have been doing, and the fix is a bigger plan or better timing, not a
+   behaviour change."
+4. **How often it actually costs them.** Five events in a month with four
+   at the ceiling is a real pattern worth acting on. One near-miss is not
+   a finding.
+
+And the trap, restated because it is the easiest way to get this wrong: **a
+gap between samples means the app was closed, not that usage was zero.**
+The longest gap on the verification machine was 33 hours -- a laptop asleep
+overnight. Never describe a gap as a quiet period, and never average across
+one.
+
+### Where this lands in the plan
+
+There is no dedicated consumption field in the plan shape -- don't invent
+one. Use what exists:
+
+- **`stat_tiles`** for the headline numbers (peak five-hour window, number
+  of times the limit was reached, the period covered). These are logged in
+  the dashboard's history across runs, so a tile like "times at the
+  five-hour limit" turns into a trend the next time this is run --
+  the one place in this plugin where re-running actually shows progress on
+  a number the user cares about.
+- **`findings`** for the events themselves, in the usual shape, with the
+  evidence line naming dates and what was running.
+- **`start_here`** for the single most costly pattern, if there is one.
+
+Quote the run's `time_window` alongside any of it, and add
+`get_plan_usage_history`'s own `coverage` note: the file covers **this
+machine only**, holds nothing from the phone or the claude.ai web app, and
+starts where it starts (about 30 days back on the verification machine).
+Say "the record on this machine starts on <date>" -- **not** "your history
+only goes back 30 days" and not "that's the retention limit". Nothing on
+disk says *why* it begins there: it could be this machine's install date,
+when the app started keeping the file, or an internal trimming rule. Report
+the observation and attribute no cause. A user who works across devices is under-measured here, and that
+belongs in the data-quality notes rather than in a footnote nobody reads.
+
 ## Work from the compact summaries, not raw transcripts
 
 Both sources carry per-chat summaries cheap enough to reason over across a
@@ -48,7 +216,7 @@ finding you're about to report. Re-reading everything defeats the point of
 the paged summaries and will blow up context on a large account.
 
 Model data specifically is not uniformly available -- see
-[data-sources.md section 5](data-sources.md#5-where-model-usage-data-actually-lives)
+[data-sources.md section 4](data-sources.md#4-where-model-usage-data-actually-lives)
 for the full picture; the short version:
 
 - **Cowork/Chat local sessions** carry a `models_used` tally
@@ -66,6 +234,10 @@ for the full picture; the short version:
   found. Local Cowork/Chat data is the only source for this signal.
 
 ## Model right-sizing
+
+*A proxy for consumption, not a measurement of it.* Best used to explain a
+peak the usage history already showed, and labelled as an inference when
+there is no history to explain.
 
 The goal is spotting a *mismatch* between task complexity and the model
 tier used for it, not auditing every choice -- treat each result as "here's
@@ -107,6 +279,11 @@ experimentation, etc.).
 
 ## Effort -- the largest under-examined lever
 
+*A proxy.* Also the cheapest lever to pull, which is why it is worth
+checking against any limit event the history turned up: a routine job
+running at high effort during the hours the five-hour window filled is the
+most fixable version of this finding.
+
 Effort is a five-level user-facing dial on current models -- **low,
 medium, high, xhigh, max** -- with **high** as the default. It is separate
 from the extended-thinking toggle, which combines with any effort level.
@@ -135,18 +312,39 @@ why effort never appeared.
 
 ## Approval mode -- a cost signal, not just a safety one
 
-`permission_mode` on each session records how much Claude had to ask
-before acting. The counterintuitive part, and the reason it belongs in this
-lens rather than only in the safety checks: **Auto consumes more usage than
-either Manual or Skip**, because it runs an extra safety-checking pass over
-each action.
+*A proxy.*
 
-Worth flagging when Auto is the standing mode across many routine,
-low-stakes sessions. Anthropic separately advises staying actively engaged
-rather than leaning on Auto for financial or sensitive-communication work,
-which is a good reason to raise it even where cost is not the concern.
+`permission_mode` on each session records how much Claude had to ask
+before acting. What is **verified** is only that: the mode is on disk,
+87 of 97 sessions carried it, and it is the field this lens reads.
+
+What is *not* verified is the reason it belongs in a cost lens. The
+guidance this plugin inherited says Auto consumes more usage than Manual or
+Skip, attributing it to an extra safety-checking pass per action. **That
+mechanism has never been checked against anything on this machine, and
+nothing on disk measures it** -- `plan-usage-history.json` records window
+fullness over time, not per-session cost, so no local data can attribute a
+percentage point to an approval mode. Treat it as received guidance, not a
+finding.
+
+The rule that follows: **Auto does not license a cost finding on its own.**
+Pair it with something measured -- a limit event whose surrounding sessions
+were standing on Auto -- and describe it as a lever worth trying, not as a
+known cost. "Auto was the standing mode across 40 routine sessions, and
+Auto is generally reported to cost more than Manual" is an honest sentence;
+"Auto cost you 15% of your weekly window" is not, and nothing here can
+support it.
+
+Still worth flagging when Auto is the standing mode across many routine,
+low-stakes sessions -- for the safety reason if not the cost one.
+Anthropic separately advises staying actively engaged rather than leaning
+on Auto for financial or sensitive-communication work, which is a good
+reason to raise it even where cost is not the concern.
 
 ## Surface choice -- Cowork versus chat
+
+*A proxy -- and the one most likely to be the real explanation behind a
+limit event, since it is a difference in kind rather than a setting.*
 
 Cowork "consumes significantly more tokens than chat due to computational
 intensity." Simple questions belong in chat; Cowork earns its cost on file
@@ -210,7 +408,7 @@ opening a new one per question.
 - **Environment-settings hygiene** -- `list_local_workspace`'s
   `memory_enabled`/`skills_enabled`/`plugins_enabled`/`custom_instructions`
   per session (see
-  [data-sources.md section 6](data-sources.md#6-environment-settings-custom-instructions-and-what-is-genuinely-not-answerable))
+  [data-sources.md section 6](data-sources.md#6-environment-settings-custom-instructions-and-whats-genuinely-not-answerable))
   are configuration, not usage, but worth a look: memory or skills turned
   off for a Space/Project where the chat content clearly could have used
   them (repeated re-explaining of the same standing context); a global

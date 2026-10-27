@@ -22,6 +22,7 @@ data sources disagree:
 
 from __future__ import annotations
 
+import math
 import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -43,10 +44,18 @@ def to_epoch_ms(value: Any) -> float | None:
     """Normalize any timestamp shape this plugin encounters into epoch
     milliseconds. Returns None for anything unrecognized rather than
     raising -- a malformed timestamp on one session must never take down a
-    whole inventory read."""
+    whole inventory read.
+
+    "Unrecognized" includes `NaN` and the infinities. Python's json module
+    happily parses the non-standard `NaN`/`Infinity` literals, so a
+    corrupted file really can put one here; letting it through would make
+    `int()` raise downstream and would re-emit a token that a strict JSON
+    parser on the other end of this tool call would reject."""
     if value is None or isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
+        if isinstance(value, float) and not math.isfinite(value):
+            return None
         return float(value) * 1000.0 if abs(value) < _SECONDS_CUTOFF else float(value)
     if isinstance(value, str):
         text = value.strip()
@@ -72,15 +81,179 @@ def iso(value: Any) -> str | None:
     """Any timestamp shape -> a readable ISO 8601 UTC string, or None. Use
     this rather than formatting a raw field: the local ones are epoch
     milliseconds, and treating them as seconds silently yields 1970 dates
-    that read as real, very stale data rather than as an error."""
+    that read as real, very stale data rather than as an error.
+
+    The returned string always carries its `+00:00` offset, so no caller
+    has to guess which zone it is in.
+
+    A numerically valid epoch value can still be outside the range
+    `datetime` can represent -- `1e18` milliseconds is roughly the year
+    31,000,000, and a garbled field really does produce values like that.
+    That raises `ValueError`/`OverflowError`/`OSError` depending on
+    platform, so it is caught here and reported as "no usable timestamp",
+    matching what this module promises everywhere else: malformed input
+    degrades, it does not raise."""
     epoch_ms = to_epoch_ms(value)
     if epoch_ms is None:
         return None
-    return datetime.fromtimestamp(epoch_ms / 1000.0, UTC).isoformat()
+    try:
+        return datetime.fromtimestamp(epoch_ms / 1000.0, UTC).isoformat()
+    except (ValueError, OverflowError, OSError):
+        return None
 
 
 def _iso(epoch_ms: float | None) -> str | None:
     return iso(epoch_ms)
+
+
+# --------------------------------------------------------------------------------
+# Local-time rendering
+# --------------------------------------------------------------------------------
+#
+# UTC is the right storage and comparison form, and every `*_iso` value in
+# this plugin stays UTC for that reason. It is the wrong *presentation*
+# form: the audience here reads dates off a calendar in the timezone they
+# live in, and "your heaviest day was Thursday" is simply false if Thursday
+# was computed in UTC for someone six hours west of it.
+#
+# So anything a person will read as a date, a weekday, or a clock time gets
+# a local companion built here. `datetime.fromtimestamp(...).astimezone()`
+# resolves the offset that was in force *at that instant* from the OS
+# timezone database, so a July sample keeps its summer-time offset even
+# when the report is run in December -- which a single cached "current UTC
+# offset" would get wrong for half the year.
+
+
+def _local_datetime(value: Any) -> datetime | None:
+    epoch_ms = to_epoch_ms(value)
+    if epoch_ms is None:
+        return None
+    try:
+        return datetime.fromtimestamp(epoch_ms / 1000.0).astimezone()
+    except (ValueError, OverflowError, OSError):
+        return None
+
+
+def utc_offset_label(moment: datetime) -> str:
+    """A UTC offset a non-technical reader can act on: `UTC-05:00`."""
+    offset = moment.utcoffset() or timedelta(0)
+    seconds = int(offset.total_seconds())
+    sign = "-" if seconds < 0 else "+"
+    seconds = abs(seconds)
+    return f"UTC{sign}{seconds // 3600:02d}:{(seconds % 3600) // 60:02d}"
+
+
+def local_iso(value: Any) -> str | None:
+    """Any timestamp shape -> ISO 8601 in **this machine's** timezone, with
+    the offset attached (`2026-08-08T07:15:00-05:00`), or None.
+
+    Always returned *alongside* the UTC `iso()` form, never instead of it:
+    the UTC value is what comparisons and joins use, and the local value is
+    what a sentence shown to a person should be built from."""
+    moment = _local_datetime(value)
+    return moment.isoformat() if moment is not None else None
+
+
+def local_day(value: Any) -> dict[str, Any] | None:
+    """The calendar day one instant fell on **in this machine's timezone**,
+    as `{"date", "weekday", "utc_offset"}`, or None when the timestamp is
+    unusable.
+
+    `utc_offset` travels with the day on purpose. A bare weekday with no
+    zone attached is exactly the defect this exists to fix: it reads as a
+    fact about the user's week while silently being a fact about UTC's."""
+    moment = _local_datetime(value)
+    if moment is None:
+        return None
+    return {
+        "date": moment.strftime("%Y-%m-%d"),
+        "weekday": moment.strftime("%A"),
+        "utc_offset": utc_offset_label(moment),
+    }
+
+
+def local_timezone_label(value: Any = None) -> dict[str, Any]:
+    """How to describe the zone every local field in a response is in.
+
+    Anchored to a supplied instant rather than to "now" because the offset
+    moves with daylight saving; pass the newest sample so the label matches
+    the most recent thing being reported, and note that each timestamp
+    carries its own offset for the rest."""
+    moment = _local_datetime(value) or datetime.now().astimezone()
+    return {
+        "name": moment.tzname(),
+        "utc_offset": utc_offset_label(moment),
+        "source": "this machine's system timezone",
+    }
+
+
+# A bound written as a bare date -- or as a datetime with no offset --
+# carries no timezone, so `parse_bound` anchors it at midnight **UTC**.
+# Everything a person *reads* in this plugin is local (see `local_day`), so
+# on a machine that isn't on UTC the two disagree by the size of the
+# offset: "since 2026-08-01" actually begins at 7pm on July 31st for a
+# reader six hours west, and the day buckets it selects are local days.
+#
+# The bound is deliberately left where it is -- midnight UTC is the
+# documented, tested contract, and moving it would silently re-scope every
+# existing caller and every saved analysis. What was wrong was that the
+# mismatch was invisible, and that the note describing the window quoted a
+# bare UTC-derived date with no zone marker at all. Both are now said out
+# loud, with the local equivalent and the exact bound to pass instead.
+_ZONELESS_SUGGESTION_TIME = "T00:00:00"
+
+
+def _is_zoneless_bound(value: Any) -> bool:
+    """True when a bound was given as a date or datetime string carrying no
+    timezone, and was therefore anchored at UTC rather than at the reader's
+    own midnight. A relative age ("90d") and an epoch number are not
+    zone-less in this sense -- neither one names a calendar day."""
+    if not isinstance(value, str) or _RELATIVE_RE.match(value):
+        return False
+    text = value.strip()
+    if not text:
+        return False
+    try:
+        float(text)
+    except ValueError:
+        pass
+    else:
+        return False
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return parsed.tzinfo is None
+
+
+def _zoneless_bound_note(name: str, raw: Any, epoch_ms: float | None) -> str | None:
+    """The caveat for one zone-less bound, or None when there is nothing to
+    say -- the bound named a zone, wasn't a date at all, or this machine is
+    on UTC, in which case the two readings coincide and a warning would be
+    noise."""
+    if epoch_ms is None or not _is_zoneless_bound(raw):
+        return None
+    moment = _local_datetime(epoch_ms)
+    if moment is None:
+        return None
+    offset = utc_offset_label(moment)
+    if offset == "UTC+00:00":
+        return None
+    text = str(raw).strip()
+    suggestion = (
+        f"{text}{_ZONELESS_SUGGESTION_TIME}{offset[3:]}"
+        if len(text) == 10
+        else f"{text}{offset[3:]}"
+    )
+    return (
+        f'`{name}` was given as "{text}", which names no timezone, so it was anchored '
+        f"at midnight UTC -- {moment.isoformat()} on this machine's clock ({offset}). "
+        "Every date, weekday, and day bucket a person reads elsewhere is a local one, "
+        "so this window edge falls part-way through a local day rather than on its "
+        f'boundary. Pass "{suggestion}" instead to line the window up with the '
+        "reader's own calendar, and don't describe the bound as a plain date without "
+        "saying which zone it is in."
+    )
 
 
 def parse_bound(value: Any, *, now_ms: float | None = None) -> tuple[float | None, str | None]:
@@ -93,7 +266,14 @@ def parse_bound(value: Any, *, now_ms: float | None = None) -> tuple[float | Non
       scoping a read, not for accounting, and the resolved absolute date is
       always reported back so the approximation is never hidden.
     - An ISO 8601 date or datetime: `"2026-01-01"`,
-      `"2026-01-01T12:00:00Z"`. A bare date is midnight UTC.
+      `"2026-01-01T12:00:00Z"`. A bare date -- or any datetime written
+      without an offset -- is midnight **UTC**, not local midnight. On a
+      machine that isn't on UTC that edge lands part-way through a local
+      day, while every day bucket and weekday this plugin shows a person is
+      local; `resolve` reports that mismatch in `boundary_notes` and says
+      which bound to pass instead. Give the bound an explicit offset
+      (`"2026-01-01T00:00:00-05:00"`) when the window has to line up with
+      the reader's own calendar days.
     - Epoch milliseconds (or seconds) as a number.
 
     A relative form is the safer choice when the caller isn't certain of
@@ -123,7 +303,15 @@ def resolve(since: Any = None, until: Any = None, *, now_ms: float | None = None
     uses. An unparseable or backwards bound is reported in `errors` and
     treated as unbounded rather than raising -- a bad bound should degrade
     to a wider read with a visible complaint, never a silent empty result
-    that looks like "you have no data.\""""
+    that looks like "you have no data."
+
+    Each bound comes back twice, the same way every other timestamp in this
+    plugin does: `since`/`until` in UTC (what the filtering compares
+    against) and `since_local`/`until_local` on this machine's clock (what
+    a sentence shown to a person should quote), with `timezone` naming the
+    zone. `boundary_notes` carries the caveat for a bound that named no
+    timezone at all -- see `_zoneless_bound_note`; `summary_notes` repeats
+    it, so a caller that already reports notes needs no extra wiring."""
     since_ms, since_err = parse_bound(since, now_ms=now_ms)
     until_ms, until_err = parse_bound(until, now_ms=now_ms)
     errors = [e for e in (since_err, until_err) if e]
@@ -135,14 +323,35 @@ def resolve(since: Any = None, until: Any = None, *, now_ms: float | None = None
         )
         since_ms = until_ms = None
 
+    # Both renderings of each bound, same convention as every other
+    # timestamp in this plugin: `since`/`until` are UTC and are what the
+    # filtering actually compares against; `since_local`/`until_local` are
+    # the same instants on this machine's clock, and are what a sentence
+    # shown to a person should be built from.
     return {
         "since": _iso(since_ms),
         "until": _iso(until_ms),
+        "since_local": local_iso(since_ms),
+        "until_local": local_iso(until_ms),
         "since_ms": since_ms,
         "until_ms": until_ms,
         "bounded": since_ms is not None or until_ms is not None,
+        "timezone": local_timezone_label(
+            since_ms if since_ms is not None else until_ms
+        ),
         "requested": {"since": since, "until": until},
         "errors": errors,
+        # A zone-less bound is anchored at UTC while the days it selects are
+        # local -- see `_zoneless_bound_note`. Empty when there is nothing
+        # to disclose.
+        "boundary_notes": [
+            note
+            for note in (
+                _zoneless_bound_note("since", since, since_ms),
+                _zoneless_bound_note("until", until, until_ms),
+            )
+            if note
+        ],
     }
 
 
@@ -204,9 +413,13 @@ def apply(
     return kept, {
         "since": window.get("since"),
         "until": window.get("until"),
+        "since_local": window.get("since_local"),
+        "until_local": window.get("until_local"),
+        "timezone": window.get("timezone"),
         "bounded": bool(window.get("bounded")),
         "requested": window.get("requested"),
         "errors": window.get("errors") or [],
+        "boundary_notes": window.get("boundary_notes") or [],
         "total_before": len(items),
         "kept": len(kept),
         "excluded": len(items) - len(kept),
@@ -219,16 +432,18 @@ def summary_notes(summary: dict[str, Any], noun: str) -> list[str]:
     windowed read. Empty when the read was unbounded and clean."""
     notes: list[str] = []
     notes.extend(summary.get("errors") or [])
+    notes.extend(summary.get("boundary_notes") or [])
 
     if summary.get("bounded") and summary.get("excluded"):
-        span = " to ".join(
-            p[:10] for p in (summary.get("since"), summary.get("until")) if p
-        ) or "the requested window"
+        bounds = [p[:10] for p in (summary.get("since"), summary.get("until")) if p]
+        span = f"{' to '.join(bounds)} UTC" if bounds else "the requested window"
         notes.append(
             f"Time-scoped to {span}: {summary['kept']} of {summary['total_before']} "
-            f"{noun} are in scope and {summary['excluded']} were excluded. Every count "
-            "below describes the window only -- say so rather than presenting it as "
-            "the account total."
+            f"{noun} are in scope and {summary['excluded']} were excluded. Those bounds "
+            "are UTC instants, and they are marked UTC on purpose: every date and "
+            "weekday elsewhere in this response is a local one, so a day on the edge of "
+            "the window can fall either side of them. Every count below describes the "
+            "window only -- say so rather than presenting it as the account total."
         )
     if summary.get("undated_kept"):
         notes.append(
