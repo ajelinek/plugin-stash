@@ -979,22 +979,63 @@ MAX_SEND_TEXT_LENGTH = 10_000
 
 # Text and chat_guid arrive as argv entries below the script itself, not
 # interpolated into the script source — no shell, no quoting/escaping footgun.
+#
+# A 1:1 chat can exist in chat.db but not among Messages.app's loaded chats
+# (deleted in the app, or not synced to this Mac), which makes `chat id` fail
+# with -1728. For 1:1 guids (`<service>;-;<handle>`) fall back to sending to the
+# handle as a participant on the services given as argv items 3+, in order.
+# Group chats have no such fallback and re-raise the original error.
 _SEND_APPLESCRIPT = """
 on run argv
     set targetChatGuid to item 1 of argv
     set messageText to item 2 of argv
+    set fallbackServices to items 3 thru -1 of argv
     tell application "Messages"
-        set targetChat to a reference to chat id targetChatGuid
-        send messageText to targetChat
+        try
+            send messageText to chat id targetChatGuid
+        on error chatErr
+            if targetChatGuid does not contain ";-;" then error chatErr
+            set AppleScript's text item delimiters to ";-;"
+            set targetHandle to last text item of targetChatGuid
+            set AppleScript's text item delimiters to ""
+            repeat with serviceName in fallbackServices
+                repeat with acct in accounts
+                    try
+                        if (service type of acct as text) is (serviceName as text) then
+                            send messageText to participant targetHandle of acct
+                            return
+                        end if
+                    on error sendErr
+                        set chatErr to sendErr
+                    end try
+                end repeat
+            end repeat
+            error chatErr
+        end try
     end tell
 end run
 """
 
+# Messages.app accepts a participant send on the wrong service and only fails
+# at delivery (e.g. iMessage to an Android number), so the fallback must follow
+# the chat's own service and never try iMessage for a non-iMessage chat.
+_FALLBACK_SERVICES = {
+    "iMessage": ("iMessage", "SMS"),
+    "RCS": ("RCS", "SMS"),
+    "SMS": ("SMS",),
+}
 
-def send_via_applescript(chat_guid: str, text: str) -> None:
+
+def _fallback_services(conn: sqlite3.Connection, chat_guid: str) -> tuple[str, ...]:
+    row = conn.execute("SELECT service_name FROM chat WHERE guid = ?", (chat_guid,)).fetchone()
+    service = row["service_name"] if row else None
+    return _FALLBACK_SERVICES.get(service, (service,) if service else ("SMS",))
+
+
+def send_via_applescript(chat_guid: str, text: str, services: tuple[str, ...] = ("SMS",)) -> None:
     try:
         proc = subprocess.run(
-            ["osascript", "-e", _SEND_APPLESCRIPT, chat_guid, text],
+            ["osascript", "-e", _SEND_APPLESCRIPT, chat_guid, text, *services],
             capture_output=True, text=True, timeout=15,
         )
     except FileNotFoundError as exc:
@@ -1050,6 +1091,7 @@ def imessage_send(
         resolved_guid = (
             chat_guid if chat_guid else _resolve_single_chat_guid(conn, address_book, handle)
         )
+        services = _fallback_services(conn, resolved_guid)
     finally:
         conn.close()
 
@@ -1066,7 +1108,7 @@ def imessage_send(
             ),
         }
 
-    send_via_applescript(resolved_guid, text)
+    send_via_applescript(resolved_guid, text, services)
     logger.info("imessage_send delivered chat_guid=%s chars=%d", resolved_guid, len(text))
     return {"preview": False, "sent": True, "chat_guid": resolved_guid, "text": text}
 

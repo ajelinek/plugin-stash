@@ -12,6 +12,7 @@ import os
 import re
 import sqlite3
 import time as time_module
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -108,8 +109,11 @@ class TestDateBoundary:
 
 class TestCoreDataTimestamp:
     def test_epoch_zero_is_the_2001_reference_date(self):
+        # The Core Data epoch is 2001-01-01 00:00 UTC; assert in UTC, since
+        # the returned datetime is in the machine's local zone and lands in
+        # 2000 there for any timezone west of UTC.
         dt = srv.core_data_ts_to_dt(0)
-        assert dt.astimezone(None).year == 2001
+        assert dt.astimezone(UTC) == datetime(2001, 1, 1, tzinfo=UTC)
 
     def test_none_returns_none(self):
         assert srv.core_data_ts_to_dt(None) is None
@@ -437,7 +441,7 @@ async def test_imessage_get_attachment_refuses_path_outside_root(fixtures):
 def _patch_send(monkeypatch):
     calls = []
 
-    def fake_send(chat_guid, text):
+    def fake_send(chat_guid, text, services=()):
         calls.append((chat_guid, text))
 
     monkeypatch.setattr(srv, "send_via_applescript", fake_send)
