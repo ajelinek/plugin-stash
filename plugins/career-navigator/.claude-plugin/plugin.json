@@ -1,6 +1,6 @@
 {
   "name": "career-navigator",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A conversational career-exploration companion for high school students: infers a RIASEC (Holland Code) personality profile through natural conversation, then matches it against a local O*NET occupational dataset. The plugin's own tools and bundled data stay fully local — no accounts, no hosting, no network calls from the plugin itself; Claude may still use ordinary web search for time-sensitive facts the static dataset doesn't have.",
   "author": {
     "name": "ajelinek"

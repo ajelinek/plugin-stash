@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "email-domain-reputation": {
+      "command": "uv",
+      "args": ["run", "--project", "${CLAUDE_PLUGIN_ROOT}", "--locked", "python", "-m", "shadetree_ai_plugins_email_domain_reputation"]
+    }
+  }
+}

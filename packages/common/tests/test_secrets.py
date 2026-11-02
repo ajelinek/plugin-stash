@@ -4,7 +4,7 @@ from shadetree_ai_plugins_common import secrets
 
 
 @pytest.fixture(autouse=True)
-def in_memory_keyring():
+def in_memory_keyring(monkeypatch):
     ring: dict[tuple[str, str], str] = {}
 
     class MemoryKeyring(keyring.backend.KeyringBackend):
@@ -19,7 +19,7 @@ def in_memory_keyring():
         def delete_password(self, service, username):
             ring.pop((service, username), None)
 
-    keyring.set_keyring(MemoryKeyring())
+    monkeypatch.setattr(secrets, "_secure_backend", lambda: MemoryKeyring())
     yield
 
 

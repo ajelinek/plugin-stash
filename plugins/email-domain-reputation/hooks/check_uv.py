@@ -1,0 +1,1 @@
+../../../packages/common/hooks/check_uv.py

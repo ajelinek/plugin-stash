@@ -71,7 +71,7 @@ Claude projects" to start once installed, or run `/analyze-usage`
   manifest (one server, `shadetree_ai_plugins_claude_usage_analyzer`).
 - `fastmcp.json` -- local dev only (`fastmcp run fastmcp.json`), not used
   by the installed plugin.
-- `hooks/check_uv.py` (symlink) + `hooks/check_data_access.py` -- two
+- `hooks/check_uv.py` (bundled copy) + `hooks/check_data_access.py` -- two
   SessionStart hooks: the shared `uv`-on-PATH check, and a plugin-specific
   check that warns (with the folder-scope explanation above) if no known
   Claude data location is visible to this session at all. Note that hooks
@@ -160,7 +160,7 @@ Claude projects" to start once installed, or run `/analyze-usage`
   interval-overlap matching, and the per-response `time_window` report.
 - `src/shadetree_ai_plugins_claude_usage_analyzer/dashboard.py` -- renders
   the HTML dashboard and keeps a local history log across runs.
-- `src/shadetree_ai_plugins_common` -- symlink to the repo's shared helpers
+- `src/shadetree_ai_plugins_common` -- bundled copy of the repo's shared helpers
   (logging, `~/.shadetree-ai-plugins/claude-usage-analyzer/` state dir).
 - `tests/test_server.py` -- in-memory tests against synthetic fixture
   directories; no real Claude Desktop install required. Includes a

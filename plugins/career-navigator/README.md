@@ -61,7 +61,7 @@ start the conversation once installed.
 - `scripts/enrich_onet_dataset.py` — re-runnable script that joins O*NET's
   `task_ratings`/`work_styles` tables onto the dataset above (the `tasks`/
   `top_work_styles` fields); see onet-data.md for how to re-run it.
-- `src/shadetree_ai_plugins_common` — symlink to the repo's shared helpers (logging,
+- `src/shadetree_ai_plugins_common` — bundled copy of the repo's shared helpers (logging,
   `~/.shadetree-ai-plugins/career-navigator/` state dir).
 - `tests/test_server.py` — in-memory tests against a small synthetic
   occupation dataset (`uv run pytest` from repo root — no dependency on the

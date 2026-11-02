@@ -1,0 +1,10 @@
+{
+  "name": "email-domain-reputation",
+  "version": "0.1.0",
+  "description": "Investigate one email address with AbstractAPI reputation and live mail-DNS checks; get an evidence-led assessment and next steps. Local MCP server, OS-keychain credentials, and keyless domain audits.",
+  "author": { "name": "ajelinek" },
+  "homepage": "https://github.com/ajelinek/shadetree-ai-plugins",
+  "repository": "https://github.com/ajelinek/shadetree-ai-plugins",
+  "license": "MIT",
+  "keywords": ["email", "reputation", "spf", "dmarc", "dkim", "dns", "keychain"]
+}

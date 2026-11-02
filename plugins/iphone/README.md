@@ -43,7 +43,7 @@ the tools once installed.
   `calls_*` tools, and a shared `contacts` tool.
 - `src/shadetree_ai_plugins_iphone/contacts.py` / `dates.py` — shared AddressBook
   resolution and date-argument parsing used by both tool families.
-- `src/shadetree_ai_plugins_common` — symlink to the repo's shared helpers (logging,
+- `src/shadetree_ai_plugins_common` — bundled copy of the repo's shared helpers (logging,
   `~/.shadetree-ai-plugins/iphone/` state dir for trusted contacts).
 - `tests/test_server.py` — in-memory tests against synthetic chat.db /
   CallHistory.storedata / AddressBook fixtures (`uv run pytest` from repo

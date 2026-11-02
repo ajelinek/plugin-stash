@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "claude-usage-analyzer",
   "displayName": "Claude Usage Analyzer",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "description": "Analyzes how you actually use Claude -- local Desktop/Cowork data plus an optional claude.ai account export -- and turns it into a live, self-updating dashboard that opens with a ranked list of the fixes worth making first: which chats belong in which Projects, what each Project's name, description, custom instructions and file structure should be, what's stale vs. active, whether your models and effort levels match the work, when you actually hit your five-hour and weekly plan limits, what Claude has remembered and whether it has gone stale, what folders and hosts Claude is standing-trusted to reach, and which connectors, skills and plugins you have enabled but never use. New in this release: the workspace reorganization now reads Claude's own record of which Space each chat was filed in, instead of guessing from folder paths -- a guess that put chats in the wrong Projects and reported real Projects as empty. Anything still inferred is labelled as a guess rather than presented as your own filing. Built for business users of the Claude Desktop app; Claude Code CLI sessions are deliberately excluded. Any run can cover all history or a chosen time window, and every date it shows you is in your own timezone. Read-only analysis only; never moves, renames, or deletes anything on its own.",
   "author": {
     "name": "ajelinek"

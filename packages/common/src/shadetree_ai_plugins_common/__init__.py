@@ -1,10 +1,10 @@
 """Shared helpers vendored into shadetree-ai-plugins plugins.
 
 This package is never installed as its own distribution (see
-pyproject.toml: `package = false`). Consuming plugins vendor it by
-symlinking this directory into their own `src/` tree and listing
+pyproject.toml: `package = false`). Consuming plugins bundle a committed
+copy in their own `src/` tree and list
 `shadetree_ai_plugins_common` in their `[tool.uv.build-backend] module-name` list —
-see plugins/imessages and plugins/iphone-history for reference.
+see scripts/vendor_common.py and docs/plugin-authoring.md for the procedure.
 """
 
 from .fsutil import check_path

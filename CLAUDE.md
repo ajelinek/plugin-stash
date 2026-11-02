@@ -59,7 +59,7 @@ plugins/<name>/
   .mcp.json                    # declares the bundled MCP server(s)
   fastmcp.json                 # dev only; unused once installed
   hooks/hooks.json             # SessionStart hook warning if `uv` is missing
-  hooks/check_uv.py            # symlink -> packages/common/hooks/check_uv.py
+  hooks/check_uv.py            # bundled copy of packages/common/hooks/check_uv.py
   skills/<skill>/SKILL.md      # when/how to use this plugin's tools (one or more skills)
   commands/<command>.md        # optional slash commands
   pyproject.toml
@@ -80,6 +80,12 @@ Naming: directory and marketplace `name` are kebab-case
 
 For `hooks/`, `fastmcp.json`, the standalone `uv.lock`, and vendoring
 `packages/common` into `src/`, see `docs/plugin-authoring.md`.
+
+**Plugins must be self-contained in Git.** Bundle common helpers and hooks
+as real files, not symlinks outside the plugin directory. Marketplace
+installers may copy only that directory without dereferencing links.
+Refresh committed shared code with
+`python3 scripts/vendor_common.py <name> [<other-name> ...]`.
 
 ### `.claude-plugin/plugin.json`
 
@@ -232,18 +238,20 @@ The easy-to-miss step per shape: **server-backed** needs its
 
 `claude` is a maintainer-side tool only — clients use Desktop's GUI.
 
-For a stronger check that a vendored dependency survives Desktop's
+For a stronger check that a vendored dependency survives a standalone
 cache-copy, see `docs/plugin-authoring.md`.
 
 ## Versioning and releases
 
 Each plugin versions independently; both shapes release the same way:
 
-1. Server-backed only: update `pyproject.toml` deps if needed and
-   **regenerate `uv.lock`** (procedure in `docs/plugin-authoring.md`).
-2. Bump `version` in `plugins/<name>/.claude-plugin/plugin.json`.
-3. Add a dated entry to `plugins/<name>/CHANGELOG.md`.
-4. `claude plugin tag plugins/<name> --push` (or tag and push manually),
+1. If shared helpers changed, commit them, then run
+   `python3 scripts/vendor_common.py <name>` for each affected plugin.
+2. Server-backed only: update `pyproject.toml` deps if needed and
+    **regenerate `uv.lock`** (procedure in `docs/plugin-authoring.md`).
+3. Bump `version` in `plugins/<name>/.claude-plugin/plugin.json`.
+4. Add a dated entry to `plugins/<name>/CHANGELOG.md`.
+5. `claude plugin tag plugins/<name> --push` (or tag and push manually),
    then push the commit.
 
 Use explicit semver, not commit-SHA auto-versioning — these are client

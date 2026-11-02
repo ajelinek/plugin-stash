@@ -92,6 +92,12 @@ claude plugin validate .           # maintainer-side only — see CLAUDE.md
 
 Run a single plugin's tests with `uv run pytest plugins/<name>/tests`.
 
+Server-backed plugins contain real copies of their shared helpers and startup
+hook, so installing only a plugin folder from Git does not leave broken
+checkout-relative symlinks. After committing shared-code changes, refresh the
+affected plugins with `python3 scripts/vendor_common.py <name> [<other-name> ...]`.
+The standalone-install regression tests run as part of `uv run pytest`.
+
 ## Versioning and releases
 
 Each plugin is versioned independently — bump `version` in

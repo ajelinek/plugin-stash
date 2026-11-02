@@ -38,7 +38,7 @@ Desktop's plugin cache looks like. So generate it in that shape:
 
 ```bash
 rm -rf /tmp/lock-sim && mkdir -p /tmp/lock-sim
-cp -RL plugins/<name> /tmp/lock-sim/<name>   # -L dereferences the common symlink, matching Desktop's cache-copy
+cp -R plugins/<name> /tmp/lock-sim/<name>    # plugin already contains its shared helpers
 cd /tmp/lock-sim/<name>
 uv lock                                      # no enclosing workspace -> real standalone uv.lock
 cp uv.lock <repo>/plugins/<name>/uv.lock
@@ -55,20 +55,26 @@ and a member's own lock is inert until that member runs standalone.
 
 ## Sharing code via `packages/common`
 
-Claude Desktop copies an installed plugin's directory into an isolated
-cache and does **not** follow references outside it. A plain
-`../../../packages/common` import, or a `{workspace = true}` uv-source
-dependency, breaks the moment a client installs the plugin — even
-though both work fine when testing in place from a git checkout.
+Marketplace installers can copy only the selected plugin directory into an
+isolated cache. Imports from `../../../packages/common`, workspace-only
+dependencies, and symlinks pointing outside the plugin all break in that
+shape. Do not rely on Claude Desktop or another host dereferencing links.
 
-The fix, proven in `plugins/iphone` and `plugins/career-navigator`: a
-**same-repo symlink**, which Desktop dereferences into a real copy at
-install time, packaged into the plugin's own distribution via
-`uv_build`'s multi-directory `module-name`:
+**Commit real copies inside each plugin.** `packages/common` remains the
+source of truth; refresh selected plugins with the maintainer script:
 
 ```bash
-ln -s ../../../packages/common/src/shadetree_ai_plugins_common plugins/<name>/src/shadetree_ai_plugins_common
+python3 scripts/vendor_common.py <name> [<other-name> ...]
 ```
+
+The script copies the shared package and `check_uv.py` hook from **committed
+`HEAD`**, replacing the old symlinks if present. Commit shared changes before
+running it. It deliberately excludes untracked files, local caches, and
+uncommitted work so unfinished changes aren't swept into client releases.
+Commit the resulting plugin files and bump each affected plugin's version.
+Existing plugin snapshots need not change until that plugin is released.
+
+Package the bundled helpers using `uv_build`'s multi-directory `module-name`:
 
 ```toml
 [tool.uv.build-backend]
@@ -96,12 +102,12 @@ hook that checks for `uv` and prints a clear, actionable message.
 deliberate choice, not an oversight — this can run unattended on a
 client's computer.
 
-Vendor by symlink. It's a plain script, not part of the installable
-package, so no `module-name`/build-backend involvement is needed:
+Bundle the hook as a real file using the same vendoring command above.
+It's a plain script, not part of the installable package, so no
+`module-name`/build-backend involvement is needed:
 
 ```bash
-mkdir -p plugins/<name>/hooks
-ln -s ../../../packages/common/hooks/check_uv.py plugins/<name>/hooks/check_uv.py
+python3 scripts/vendor_common.py <name>
 ```
 
 `plugins/<name>/hooks/hooks.json`:
@@ -129,8 +135,8 @@ entry; the other covers it.
 
 **Caveat:** verified only by reasoning through the documented hook
 contract and simulating the cache-copy locally
-(`packages/common/hooks/check_uv.py` is plain stdlib Python and
-dereferences the same way `shadetree_ai_plugins_common` does). It has
+(`packages/common/hooks/check_uv.py` is plain stdlib Python and is
+bundled as a regular file). It has
 **not** been exercised against a real Windows machine or a live Claude
 Desktop session. Smoke-test for real once there's Windows access,
 particularly whether a hook entry whose `command` can't be spawned at
@@ -162,14 +168,18 @@ and `--strict` too.
 
 ## Verifying the vendored dependency survives the cache-copy
 
-Stronger than the in-memory `fastmcp.Client` tests: spawn the plugin's
-actual `.mcp.json` command against a copy with the symlink
-dereferenced, and confirm it resolves with no sibling `packages/`
-directory present.
+`packages/common/tests/test_plugin_packaging.py` copies every server-backed
+marketplace plugin without dereferencing symlinks, imports its bundled
+modules in a fresh process, and lists its MCP tools. It checks module origins
+so the workspace's editable installs cannot hide missing bundled code.
+
+For an additional launch check, spawn the plugin's actual `.mcp.json`
+command against a standalone copy with no sibling `packages/` directory.
+Do **not** use `cp -L`: dereferencing links would hide this packaging bug.
 
 ```bash
-cp -RL plugins/<name> /tmp/check
-uv run --project /tmp/check python -m shadetree_ai_plugins_<name>
+cp -R plugins/<name> /tmp/check
+uv run --project /tmp/check --locked python -m shadetree_ai_plugins_<name>
 ```
 
 ## Incoming migration from `skills-stash`

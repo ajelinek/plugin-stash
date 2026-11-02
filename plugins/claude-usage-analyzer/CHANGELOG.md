@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.3 -- 2026-11-01
+
+- Bundle shared helpers and the startup hook as real files rather than
+  checkout-relative symlinks. Git marketplace installs that copy only this
+  plugin no longer lose `shadetree_ai_plugins_common` or `check_uv.py`.
+
 ## 0.6.2 -- 2026-09-06
 
 **This release fixes a bug that made the primary lens describe the wrong

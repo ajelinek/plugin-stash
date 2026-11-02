@@ -9,6 +9,7 @@ members = [
     "shadetree-ai-plugins-career-navigator",
     "shadetree-ai-plugins-claude-usage-analyzer",
     "shadetree-ai-plugins-common",
+    "shadetree-ai-plugins-email-domain-reputation",
     "shadetree-ai-plugins-iphone",
 ]
 
@@ -1383,6 +1384,23 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "keyring", specifier = ">=25.5.0" }]
+
+[[package]]
+name = "shadetree-ai-plugins-email-domain-reputation"
+version = "0.1.0"
+source = { editable = "plugins/email-domain-reputation" }
+dependencies = [
+    { name = "dnspython" },
+    { name = "fastmcp" },
+    { name = "keyring" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "dnspython", specifier = ">=2.7,<3" },
+    { name = "fastmcp", specifier = ">=3.4" },
+    { name = "keyring", specifier = ">=25.5.0" },
+]
 
 [[package]]
 name = "shadetree-ai-plugins-iphone"
